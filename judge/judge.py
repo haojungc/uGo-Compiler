@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-__version__ = '1.9.0'
+__version__ = '1.12.0'
 
 import re
 import logging
@@ -38,6 +38,7 @@ from collections import namedtuple
 import configparser
 import argparse
 import sys
+import errno
 if sys.version_info < (3,):
     raise ImportError(
         "You are running local-judge {} on Python 2\n".format(__version__) +
@@ -108,7 +109,7 @@ class LocalJudge:
             # Suppress the error when the directory already exists
             os.makedirs(self.temp_output_dir)
         except OSError as e:
-            if e.errno != os.errno.EEXIST:
+            if e.errno != errno.EEXIST:
                 ERR_HANDLER.handle(str(e))
         # tests contains corresponding input and answer path
         Test = namedtuple('Test', ('test_name', 'input_path', 'answer_path'))
@@ -121,7 +122,7 @@ class LocalJudge:
         """ Build the executable which needs to be judged.
         """
         process = subprocess.Popen(
-            self.build_command, stdout=PIPE, stderr=PIPE, shell=True)
+            self.build_command, stdout=PIPE, stderr=PIPE, shell=True, executable='bash')
         out, err = process.communicate()
         if process.returncode != 0:
             ERR_HANDLER.handle(
@@ -146,7 +147,7 @@ class LocalJudge:
             input_filepath)+"_"+str(int(time.time()))+".out")
         cmd = re.sub(r'{input}', input_filepath, self.run_command)
         cmd = re.sub(r'{output}', output_filepath, cmd)
-        process = subprocess.Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+        process = subprocess.Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True, executable='bash')
         out, err = process.communicate()
         if process.returncode != 0:
             ERR_HANDLER.handle(
@@ -161,21 +162,26 @@ class LocalJudge:
         If the files are identical, the accept will be set to True.
         Another return value is the diff result.
         """
+        if output_filepath == "no_executable_to_run":
+            return False, output_filepath
         if not os.path.isfile(output_filepath):
             ERR_HANDLER.handle(
                 "There was no any output from your program to compare with `" +
                 answer_filepath +
                 "` Please check `your program` first.")
-            return False, "no_executable_to_run"
+            return False, "no_output_file"
         if not os.path.isfile(answer_filepath):
             ERR_HANDLER.handle(
                 "There was no any corresponding answer. " +
                 "Did you set the `AnswerDir` correctly? " +
                 "Please check `judge.conf` first.")
-            return False, "no_executable_to_run"
+            return False, "no_answer_file"
+        # Sync the file mode
         cmd = "".join(
-            [self.diff_command, " ", output_filepath, " ", answer_filepath])
-        process = subprocess.Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+            ["chmod --reference={answer} {output} && ", self.diff_command])
+        cmd = re.sub(r'{output}', output_filepath, cmd)
+        cmd = re.sub(r'{answer}', answer_filepath, cmd)
+        process = subprocess.Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True, executable='bash')
         out, err = process.communicate()
         # If there is difference between two files, the return code is not 0
         if str(err, encoding='utf8').strip() != "":
@@ -244,12 +250,16 @@ class ErrorHandler:
     def __init__(self, exit_or_log, **logging_config):
         self.exit_or_log = exit_or_log
         self.student_id = ""
+        self.cache_log = ""
         if logging_config == {}:
             logging_config['format'] = '%(asctime)-15s [%(levelname)s] %(message)s'
         logging.basicConfig(**logging_config)
 
     def set_student_id(self, student_id):
         self.student_id = student_id
+
+    def clear_cache_log(self):
+        self.cache_log = ""
 
     def handle(self, msg="", exit_or_log=None):
         action = self.exit_or_log
@@ -259,6 +269,7 @@ class ErrorHandler:
             print(self.student_id+" "+msg)
             exit(1)
         elif action == 'log':
+            self.cache_log += (str(msg)+str("\n"))
             logging.error(self.student_id+" "+msg)
         else:
             print("Cannot handle `" + action +
@@ -307,7 +318,7 @@ def judge_all_tests(config, verbose_level, total_score):
 
 if __name__ == '__main__':
     args = get_args()
-    config = configparser.ConfigParser()
+    config = configparser.RawConfigParser()
     config.read(args.config)
     ERR_HANDLER = ErrorHandler(config['Config']['ExitOrLog'])
 

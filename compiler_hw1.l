@@ -1,16 +1,43 @@
 %{
-    int tot_line = 1;
+    #define true 1
+    #define false 0
+
+    int tot_line = 0;
     int tot_comment = 0;
+    int newline = true;
 %}
 
 integer         [0-9]+
 real            [0-9]+"."[0-9]+
 id              [A-Za-z_][A-Za-z0-9_]*
-string          \".*\"
-c_comment       \/\*(.|\n)*\*\/
-cpp_comment     \/\/.*\n
+cpp_comment     \/\/.*
+
+%x STRING C_COMMENT CPP_COMMENT
 
 %%
+
+\"                  {printf("%-8s \t %s\n", "\"", "QUOTA"); BEGIN STRING;}
+<STRING>\"          {printf("%-8s \t %s\n", "\"", "QUOTA"); BEGIN 0;}
+<STRING>[^\"]*      {printf("%-8s \t %s\n", yytext, "STRING");}
+
+"/*"                {
+                        ECHO;
+                        if(newline == true)
+                            tot_comment++;
+                        BEGIN C_COMMENT;
+                    }
+<C_COMMENT>"*/"     {newline = false; printf("%-8s \t %s\n", "*/", "C Comment"); BEGIN 0;}
+<C_COMMENT>.        {ECHO;}
+<C_COMMENT>\*[^\/]  {ECHO;}
+<C_COMMENT>\n       {ECHO; printf("%-8s\t %s\n", "", "C Comment"); tot_line++; tot_comment++;}
+
+{cpp_comment}       {
+                        if(newline == true)
+                            tot_comment++;
+                        printf("%-8s \t %s\n", yytext, "C++ Comment");
+                        BEGIN CPP_COMMENT;
+                    }
+<CPP_COMMENT>\n     {tot_line++; printf("%-8s \t %s\n", "", "NEWLINE"); BEGIN 0;}
 
 "+"             {printf("%-8s \t %s\n", yytext, "ADD");}
 "-"             {printf("%-8s \t %s\n", yytext, "SUB");}
@@ -46,7 +73,6 @@ cpp_comment     \/\/.*\n
 "}"             {printf("%-8s \t %s\n", yytext, "RBRACE");}
 ";"             {printf("%-8s \t %s\n", yytext, "SEMICOLON");}
 ","             {printf("%-8s \t %s\n", yytext, "COMMA");}
-\"              {printf("%-8s \t %s\n", yytext, "QUOTA");}
 
 "print"         {printf("%-8s \t %s\n", yytext, "PRINT");}
 "println"       {printf("%-8s \t %s\n", yytext, "PRINTLN");}
@@ -66,48 +92,10 @@ cpp_comment     \/\/.*\n
 {integer}       {printf("%-8s \t %s\n", yytext, "INT_LIT");}
 {real}          {printf("%-8s \t %s\n", yytext, "FLOAT_LIT");}
 {id}            {printf("%-8s \t %s\n", yytext, "IDENT");}
-{string}        {
-                    int i;
-                    char *s = malloc(sizeof(char) * (yyleng - 2));
-                    
-                    // Copy string literal to s
-                    for(i = 0; i < yyleng - 2; i++)
-                        s[i] = yytext[i + 1];
-
-                    printf("%-8c \t %s\n", '\"', "QUOTA");
-                    printf("%-8s \t %s\n", s, "STRING");
-                    printf("%-8c \t %s\n", '\"', "QUOTA");
-
-                    free(s);
-                }
-{c_comment}     {
-                    int i, j;
-                    char *s = malloc(sizeof(char) * yyleng);
-
-                    tot_comment++;
-                    
-                    // print comments and count the total line
-                    for(i = 0, j = 0; i < yyleng; i++) {
-                        s[j++] = yytext[i];
-                        if(yytext[i] == '\n') {
-                            tot_line++;
-                            printf("%-8s \t %s\n", s, "C Comment");
-
-                            // reset s
-                            memset(s, '\0', yyleng);
-                            j = 0;
-                        }
-                    }
-
-                    free(s);
-                }
-{cpp_comment}   {
-                    tot_comment++;
-                    printf("%-8s \t %s\n", yytext, "C++ Comment");
-                    printf("%-8s \t %s\n", "", "NEWLINE");
-                }
-\n              {tot_line++; printf("%-8s \t %s\n", "", "NEWLINE");}
+\n              {newline == true; tot_line++; printf("%-8s \t %s\n", "", "NEWLINE");}
 [ \t]           ;
+
+<<EOF>>         {tot_line++; yyterminate();}
 
 %%
 

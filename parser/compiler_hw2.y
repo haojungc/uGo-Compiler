@@ -36,7 +36,6 @@
     float f_val;
     char *s_val;
     char *type;
-    char *op_type;
 }
 
 /* Token without return */
@@ -57,7 +56,6 @@
 
 /* Nonterminal with return, which need to specify type */
 %type <type> type_name
-%type <op_type> op cmp_op arith_op
 
 /* Precedence from low to high */
 %right '='
@@ -67,6 +65,8 @@
 %left '+' '-'
 %left '*' '/' '%'
 %left '!'   // FIXME: POS & NEG missing
+%left ']'
+%left ')'
 
 /* Yacc will start at this nonterminal */
 %start program
@@ -87,6 +87,7 @@ stmt
     : dcl NEWLINE
     | simpleStmt NEWLINE
     | block NEWLINE
+    | printStmt NEWLINE
     | NEWLINE
     ;
 
@@ -134,7 +135,19 @@ exprStmt
     ;
 
 expr
-    : expr op expr      { printf("%s\n", $2); }
+    : expr LOR expr     { printf("LOR\n"); }
+    | expr LAND expr    { printf("LAND\n"); }
+    | expr '<' expr     { printf("LSS\n"); }
+    | expr '>' expr     { printf("GTR\n"); }
+    | expr GEQ expr     { printf("GEQ\n"); }
+    | expr LEQ expr     { printf("LEQ\n"); }
+    | expr EQL expr     { printf("EQL\n"); }
+    | expr NEQ expr     { printf("NEQ\n"); }
+    | expr '+' expr     { printf("ADD\n"); }
+    | expr '-' expr     { printf("SUB\n"); }
+    | expr '*' expr     { printf("MUL\n"); }
+    | expr '/' expr     { printf("QUO\n"); }
+    | expr '%' expr     { printf("REM\n"); }
     | unaryExpr
     | literal           
     | IDENT             { lookup_symbol($1); }
@@ -142,7 +155,9 @@ expr
 
 unaryExpr
     : primaryExpr
-    | unary_op unaryExpr
+    | '+' unaryExpr     { printf("POS\n"); }
+    | '-' unaryExpr     { printf("NEG\n"); }
+    | '!' unaryExpr     { printf("NOT\n"); }
     ;
 
 primaryExpr
@@ -162,34 +177,10 @@ conversionExpr
     ;
 
 literal
-    : INT_LIT           { printf("INT_LIT %d\n", $1); }
-    | FLOAT_LIT         { printf("FLOAT_LIT %f\n", $1); }
-    | BOOL_LIT          { printf("%s\n", $1); }
-    | '"' STRING_LIT '"'        { printf("STRING_LIT %s\n", $2); }
-    ;
-
-op
-    : LAND      { $$ = "LAND"; }
-    | LOR       { $$ = "LOR"; }
-    | cmp_op    { $$ = $1; }
-    | arith_op  { $$ = $1; }
-    ;
-
-cmp_op
-    : '>'       { $$ = ">"; }
-    | '<'       { $$ = "<"; }
-    | GEQ       { $$ = "GEQ"; }
-    | LEQ       { $$ = "LEQ"; }
-    | EQL       { $$ = "EQL"; }
-    | NEQ       { $$ = "NEQ"; }
-    ;
-
-arith_op
-    : '+'       { $$ = "ADD"; }
-    | '-'       { $$ = "SUB"; }
-    | '*'       { $$ = "MUL"; }
-    | '/'       { $$ = "QUO"; }
-    | '%'       { $$ = "REM"; }
+    : INT_LIT               { printf("INT_LIT %d\n", $1); }
+    | FLOAT_LIT             { printf("FLOAT_LIT %f\n", $1); }
+    | BOOL_LIT              { printf("%s\n", $1); }
+    | '"' STRING_LIT '"'    { printf("STRING_LIT %s\n", $2); }
     ;
 
 assign_op
@@ -202,9 +193,9 @@ assign_op
     ;
 
 unary_op
-    : '+' 
-    | '-' 
-    | '!'
+    : '+'       { printf("POS\n"); }
+    | '-'       { printf("NEG\n"); }
+    | '!'       { printf("NOT\n"); }
     ;
 
 incDecStmt
@@ -212,6 +203,10 @@ incDecStmt
     | expr DEC      { printf("DEC\n"); }
     ;
 
+printStmt
+    : PRINT '(' expr ')'    { printf("PRINT bool\n"); }
+    | PRINTLN '(' expr ')'  { printf("PRINTLN bool\n"); }
+    ;
 
 %%
 

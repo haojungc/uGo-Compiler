@@ -136,7 +136,7 @@ exprStmt
 expr
     : expr op expr      { printf("%s\n", $2); }
     | unaryExpr
-    | literal
+    | literal           
     | IDENT             { lookup_symbol($1); }
     ;
 
@@ -165,7 +165,7 @@ literal
     : INT_LIT           { printf("INT_LIT %d\n", $1); }
     | FLOAT_LIT         { printf("FLOAT_LIT %f\n", $1); }
     | BOOL_LIT          { printf("%s\n", $1); }
-    | STRING_LIT        { printf("STRING_LIT %s\n", $1); }
+    | '"' STRING_LIT '"'        { printf("STRING_LIT %s\n", $2); }
     ;
 
 op

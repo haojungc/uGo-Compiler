@@ -90,6 +90,7 @@ stmt
     : dcl NEWLINE
     | simpleStmt NEWLINE
     | block NEWLINE
+    | ifStmt NEWLINE
     | printStmt NEWLINE
     | NEWLINE
     ;
@@ -128,6 +129,16 @@ left_brace
 
 right_brace
     : '}'           { dump_symbol(); scope--; }
+    ;
+
+ifStmt
+    : IF condition block
+    | IF condition block ELSE ifStmt
+    | IF condition block ELSE block
+    ;
+
+condition
+    : expr
     ;
 
 assignmentStmt

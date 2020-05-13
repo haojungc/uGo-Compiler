@@ -284,7 +284,6 @@ static void insert_symbol(char *name, bool isArray, char *type) {
     
     /* Creates a new symbol */
     Symbol *newSymbol = malloc(sizeof(Symbol));
-    // newSymbol->name = strdup(name);
     newSymbol->name = name;
     newSymbol->address = address++;
     newSymbol->nextSymbol = NULL;

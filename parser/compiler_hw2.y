@@ -247,21 +247,19 @@ static void create_table() {
 
 /* Inserts an entry for a variable declaration */
 static void insert_symbol(char *name, bool isArray, char *type) {
-    printf("> Insert {%s} into symbol table (scope level: %d)\n", name, scope);
-    // printf("> Type: %s\n", type);
-    // printf("> Array: %s\n", isArray ? "yes" : "no");
-
+    // printf("\n>>> lineno: %d\n\n", yylineno);
     Symbol *newSymbol = malloc(sizeof(Symbol));
 
     /* Initialize newSymbol */
     newSymbol->name = strdup(name);
     newSymbol->address = address++;
-    newSymbol->lineno = yylineno;
     newSymbol->nextSymbol = NULL;
     if (isArray) {
+        newSymbol->lineno = yylineno + 1;
         newSymbol->type = "array";
         newSymbol->elementType = strdup(type);
     } else {
+        newSymbol->lineno = yylineno;
         newSymbol->type = strdup(type);
         newSymbol->elementType = "-";
     }
@@ -275,6 +273,10 @@ static void insert_symbol(char *name, bool isArray, char *type) {
             ;
         currentSymbol->nextSymbol = newSymbol;
     }
+
+    printf("> Insert {%s} into symbol table (scope level: %d)\n", name, scope);
+    // printf("> Type: %s\n", type);
+    // printf("> Array: %s\n", isArray ? "yes" : "no");
 }
 
 /* Looks up an entry in the symbol table */

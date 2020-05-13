@@ -19,6 +19,10 @@
     static char *lookup_symbol(char*);              /* Return the type name of the symbol */
     static void dump_symbol();
     static char abbr(char*);                    /* Get the abbreviation of type name */
+    static char *get_type(char*);               /* Convert literal type to type name */
+    static void check_operation(char*, char*, char*); /* check_operation(type of LHS, type of RHS, operator) */
+    static void check_assignment(char*, char*, char*); /* check_assignment(type of LHS, type of RHS, operator) */
+    static void check_condition(char*);                 /* Checks if the type is boolean */
 
     Table *firstTable = NULL;
     Table *currentTable = NULL;
@@ -57,7 +61,7 @@
 %token <s_val> BOOL_LIT STRING_LIT
 
 /* Nonterminal with return, which need to specify type */
-%type <type> expr type_name primaryExpr operand literal
+%type <type> expr type_name unaryExpr primaryExpr operand literal
 %type <op_type> assign_op
 
 /* Precedence from low to high */
@@ -67,7 +71,7 @@
 %left '<' '>' GEQ LEQ EQL NEQ
 %left '+' '-'
 %left '*' '/' '%'
-%left '!'   // FIXME: POS & NEG missing
+%left '!'
 %left ']'
 %left ')'
 
@@ -139,7 +143,7 @@ ifStmt
     ;
 
 condition
-    : expr
+    : expr      { check_condition(get_type($1)); }
     ;
 
 forStmt
@@ -160,7 +164,8 @@ postStmt
     ;
 
 assignmentStmt
-    : expr assign_op expr   { printf("%s\n", $2); }
+    : expr assign_op expr   { check_assignment(get_type($1), get_type($3), $2); printf("%s\n", $2); }
+    | expr '=' expr         { check_operation(get_type($1), get_type($3), "ASSIGN"); printf("ASSIGN\n"); }
     ;
 
 exprStmt
@@ -168,29 +173,29 @@ exprStmt
     ;
 
 expr
-    : expr LOR expr     { $$ = "bool"; printf("LOR\n"); }
-    | expr LAND expr    { $$ = "bool"; printf("LAND\n"); }
+    : expr LOR expr     { $$ = "bool"; check_operation(get_type($1), get_type($3), "LOR"); printf("LOR\n"); }
+    | expr LAND expr    { $$ = "bool"; check_operation(get_type($1), get_type($3), "LAND"); printf("LAND\n"); }
     | expr '<' expr     { $$ = "bool"; printf("LSS\n"); }
     | expr '>' expr     { $$ = "bool"; printf("GTR\n"); }
     | expr GEQ expr     { $$ = "bool"; printf("GEQ\n"); }
     | expr LEQ expr     { $$ = "bool"; printf("LEQ\n"); }
     | expr EQL expr     { $$ = "bool"; printf("EQL\n"); }
     | expr NEQ expr     { $$ = "bool"; printf("NEQ\n"); }
-    | expr '+' expr     { $$ = $1; printf("ADD\n"); }
-    | expr '-' expr     { $$ = $1; printf("SUB\n"); }
-    | expr '*' expr     { $$ = $1; printf("MUL\n"); }
-    | expr '/' expr     { $$ = $1; printf("QUO\n"); }
-    | expr '%' expr     { $$ = $1; printf("REM\n"); }
-    | unaryExpr
-    | literal           
+    | expr '+' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "ADD"); printf("ADD\n"); }
+    | expr '-' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "SUB"); printf("SUB\n"); }
+    | expr '*' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "MUL"); printf("MUL\n"); }
+    | expr '/' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "QUO"); printf("QUO\n"); }
+    | expr '%' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "REM"); printf("REM\n"); }
+    | unaryExpr         { $$ = $1; }
+    | literal           { $$ = $1; }
     | IDENT             { $$ = lookup_symbol($1); }
     ;
 
 unaryExpr
-    : primaryExpr
-    | '+' unaryExpr     { printf("POS\n"); }
-    | '-' unaryExpr     { printf("NEG\n"); }
-    | '!' unaryExpr     { printf("NOT\n"); }
+    : primaryExpr       { $$ = $1; }
+    | '+' unaryExpr     { $$ = $2; printf("POS\n"); }
+    | '-' unaryExpr     { $$ = $2; printf("NEG\n"); }
+    | '!' unaryExpr     { $$ = $2; printf("NOT\n"); }
     ;
 
 primaryExpr
@@ -201,24 +206,23 @@ primaryExpr
 
 operand
     : literal           { $$ = $1; }
-    | '(' expr ')'
+    | '(' expr ')'      { $$ = $2; }
     | IDENT             { $$ = lookup_symbol($1); }
     ;
 
 conversionExpr
-    : type_name '(' expr ')'    { printf("%c to %c\n", abbr($1), abbr($3)); }
+    : type_name '(' expr ')'    { printf("%c to %c\n", abbr($3), abbr($1)); }
     ;
 
 literal
-    : INT_LIT               { $$ = "int32"; printf("INT_LIT %d\n", $1); }
-    | FLOAT_LIT             { $$ = "float32"; printf("FLOAT_LIT %f\n", $1); }
-    | BOOL_LIT              { $$ = "bool"; printf("%s\n", $1); }
-    | '"' STRING_LIT '"'    { $$ = "string"; printf("STRING_LIT %s\n", $2); }
+    : INT_LIT               { $$ = "int32_lit"; printf("INT_LIT %d\n", $1); }
+    | FLOAT_LIT             { $$ = "float32_lit"; printf("FLOAT_LIT %f\n", $1); }
+    | BOOL_LIT              { $$ = "bool_lit"; printf("%s\n", $1); }
+    | '"' STRING_LIT '"'    { $$ = "string_lit"; printf("STRING_LIT %s\n", $2); }
     ;
 
 assign_op
-    : '='                   { $$ = "ASSIGN"; }
-    | ADD_ASSIGN            { $$ = "ADD_ASSIGN"; }
+    : ADD_ASSIGN            { $$ = "ADD_ASSIGN"; }
     | SUB_ASSIGN            { $$ = "SUB_ASSIGN"; }
     | MUL_ASSIGN            { $$ = "MUL_ASSIGN"; }
     | QUO_ASSIGN            { $$ = "QUO_ASSIGN"; }
@@ -231,8 +235,8 @@ incDecStmt
     ;
 
 printStmt
-    : PRINT '(' expr ')'    { printf("PRINT %s\n", $3); }
-    | PRINTLN '(' expr ')'  { printf("PRINTLN %s\n", $3); }
+    : PRINT '(' expr ')'    { printf("PRINT %s\n", get_type($3)); }
+    | PRINTLN '(' expr ')'  { printf("PRINTLN %s\n", get_type($3)); }
     ;
 
 %%
@@ -277,7 +281,16 @@ static void create_table() {
 
 /* Inserts an entry for a variable declaration */
 static void insert_symbol(char *name, bool isArray, char *type) {
-    // printf("\n>>> lineno: %d\n\n", yylineno);
+    /* Checks if the symbol is already declared in the same scope */
+    Symbol *currentSymbol;
+    for (currentSymbol = currentTable->firstSymbol; currentSymbol != NULL; currentSymbol = currentSymbol->nextSymbol) {
+        char *_name = currentSymbol->name;
+        if (strcmp(_name, name) == 0) {
+            printf("error:%d: %s redeclared in this block. previous declaration at line %d\n", yylineno, _name, currentSymbol->lineno);
+            return;
+        }
+    }
+    
     Symbol *newSymbol = malloc(sizeof(Symbol));
 
     /* Initialize newSymbol */
@@ -305,12 +318,10 @@ static void insert_symbol(char *name, bool isArray, char *type) {
     }
 
     printf("> Insert {%s} into symbol table (scope level: %d)\n", name, scope);
-    // printf("> Type: %s\n", type);
-    // printf("> Array: %s\n", isArray ? "yes" : "no");
 }
 
 /* Looks up an entry in the symbol table */
-static char* lookup_symbol(char *symbol) {
+static char *lookup_symbol(char *symbol) {
     Table *table;
 
     for (table = currentTable; table != NULL; table = table->prevTable) {
@@ -329,7 +340,9 @@ static char* lookup_symbol(char *symbol) {
         }
     }
 
-    /* error: not declared */
+    /* Error: undefined symbol */
+    printf("error:%d: undefined: %s\n", yylineno + 1, symbol);
+    return "undefined";
 }
 
 /* Dumps all contents in the symbol table of current scope and its entries when exiting a scope */
@@ -355,8 +368,70 @@ static void dump_symbol() {
 }
 
 static char abbr(char *type) {
-    if (strcmp(type, "int32"))      return 'I';
-    if (strcmp(type, "float32"))    return 'F';
+    if (strcmp(type, "int32") == 0 || strcmp(type, "int32_lit") == 0)      return 'I';
+    if (strcmp(type, "float32") == 0 || strcmp(type, "float32_lit") == 0)    return 'F';
 
     /* error: cannot be converted */
+}
+
+static char *get_type(char *type) {
+    if (strcmp(type, "int32") == 0 || strcmp(type, "int32_lit") == 0)
+        return "int32";
+    if (strcmp(type, "float32") == 0 || strcmp(type, "float32_lit") == 0)
+        return "float32";
+    if (strcmp(type, "bool") == 0 || strcmp(type, "bool_lit") == 0)
+        return "bool";
+    if (strcmp(type, "string") == 0 || strcmp(type, "string_lit") == 0)
+        return "string";
+    return "undefined";
+}
+
+static void check_operation(char *left_type, char *right_type, char *op) {
+    /* Undefined symbol */
+    bool undefined = (strcmp(left_type, "undefined") == 0) || (strcmp(right_type, "undefined") == 0);
+    if (undefined) return;
+
+    /* Invalid LOR & LAND operation */
+    bool left_isBool = (strcmp(left_type, "bool") == 0),
+         right_isBool = (strcmp(right_type, "bool") == 0);
+    bool invalid_LOR_LAND = (strcmp(op, "LOR") == 0 || strcmp(op, "LAND") == 0) && (!left_isBool || !right_isBool);
+    if (invalid_LOR_LAND) {
+        char *invalid_type = (left_isBool) ? right_type : left_type;
+        printf("error:%d: invalid operation: (operator %s not defined on %s)\n", 
+                yylineno, op, invalid_type);
+        return;
+    }
+
+    /* Invalid REM operation */
+    bool left_isInt32 = (strcmp(left_type, "int32") == 0),
+         right_isInt32 = (strcmp(right_type, "int32") == 0);
+    bool invalid_REM = (strcmp(op, "REM") == 0) && (!left_isInt32 || !right_isInt32);
+    if (invalid_REM) {
+        char *invalid_type = (left_isInt32) ? right_type : left_type;
+        printf("error:%d: invalid operation: (operator REM not defined on %s)\n", 
+                yylineno, invalid_type);
+        return;
+    }
+
+    /* Other invalid operations */
+    if (strcmp(left_type, right_type) != 0) {
+        printf("error:%d: invalid operation: %s (mismatched types %s and %s)\n", 
+                yylineno, op, left_type, right_type);
+        return;
+    }
+}
+
+static void check_assignment(char *left_type, char *right_type, char *op) {
+    /* Invalid assignment */
+    if (strcmp(left_type, right_type) != 0) {
+        printf("error:%d: invalid operation: %s (mismatched types %s and %s)\n", 
+                yylineno, op, left_type, right_type);
+        return;
+    }
+}
+
+/* Checks if the type is boolean */
+static void check_condition(char *type) {
+    if (strcmp(type, "bool") != 0)
+        printf("error:%d: non-bool (type %s) used as for condition\n", yylineno + 1, type);
 }

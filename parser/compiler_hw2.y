@@ -18,6 +18,7 @@
     static void insert_symbol(char*, bool, char*);  /* insert_symbol(id, isArray, typeName) */
     static char *lookup_symbol(char*);              /* Return the type name of the symbol */
     static void dump_symbol();
+    static char abbr(char*);                    /* Get the abbreviation of type name */
 
     Table *firstTable = NULL;
     Table *currentTable = NULL;
@@ -56,7 +57,7 @@
 %token <s_val> BOOL_LIT STRING_LIT
 
 /* Nonterminal with return, which need to specify type */
-%type <type> expr type_name primaryExpr operand
+%type <type> expr type_name primaryExpr operand literal
 %type <op_type> assign_op
 
 /* Precedence from low to high */
@@ -170,20 +171,20 @@ primaryExpr
     ;
 
 operand
-    : literal
+    : literal           { $$ = $1; }
     | '(' expr ')'
     | IDENT             { $$ = lookup_symbol($1); }
     ;
 
 conversionExpr
-    : type_name '(' expr ')'
+    : type_name '(' expr ')'    { printf("%c to %c\n", abbr($1), abbr($3)); }
     ;
 
 literal
-    : INT_LIT               { printf("INT_LIT %d\n", $1); }
-    | FLOAT_LIT             { printf("FLOAT_LIT %f\n", $1); }
-    | BOOL_LIT              { printf("%s\n", $1); }
-    | '"' STRING_LIT '"'    { printf("STRING_LIT %s\n", $2); }
+    : INT_LIT               { $$ = "int32"; printf("INT_LIT %d\n", $1); }
+    | FLOAT_LIT             { $$ = "float32"; printf("FLOAT_LIT %f\n", $1); }
+    | BOOL_LIT              { $$ = "bool"; printf("%s\n", $1); }
+    | '"' STRING_LIT '"'    { $$ = "string"; printf("STRING_LIT %s\n", $2); }
     ;
 
 assign_op
@@ -322,4 +323,11 @@ static void dump_symbol() {
     if (prevTable != NULL) {
         currentTable->nextTable = NULL;
     }
+}
+
+static char abbr(char *type) {
+    if (strcmp(type, "int32"))      return 'I';
+    if (strcmp(type, "float32"))    return 'F';
+
+    /* error: cannot be converted */
 }

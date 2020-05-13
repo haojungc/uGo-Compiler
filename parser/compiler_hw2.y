@@ -15,13 +15,13 @@
 
     /* Symbol table function - you can add new function if needed. */
     static void create_table();
-    static void insert_symbol(char*, bool, char*);  /* insert_symbol(id, isArray, typeName) */
-    static char *lookup_symbol(char*);              /* Return the type name of the symbol */
+    static void insert_symbol(char*, bool, char*);      /* insert_symbol(id, isArray, typeName) */
+    static char *lookup_symbol(char*);                  /* Returns the type name of the symbol */
     static void dump_symbol();
-    static char abbr(char*);                    /* Get the abbreviation of type name */
-    static char *get_type(char*);               /* Convert literal type to type name */
-    static void check_operation(char*, char*, char*); /* check_operation(type of LHS, type of RHS, operator) */
-    static void check_assignment(char*, char*, char*); /* check_assignment(type of LHS, type of RHS, operator) */
+    static char abbr(char*);                            /* Gets the abbreviation of type name */
+    static char *get_type(char*);                       /* Converts literal type to type name */
+    static void check_operation(char*, char*, char*);   /* check_operation(type of LHS, type of RHS, operator) */
+    static void check_assignment(char*, char*, char*);  /* check_assignment(type of LHS, type of RHS, operator) */
     static void check_condition(char*);                 /* Checks if the type is boolean */
 
     Table *firstTable = NULL;
@@ -33,7 +33,7 @@
 
 %error-verbose
 
-/* Use variable or self-defined structure to represent
+/* Uses variable or self-defined structure to represent
  * nonterminal and token type
  */
 %union {
@@ -61,7 +61,7 @@
 %token <s_val> BOOL_LIT STRING_LIT
 
 /* Nonterminal with return, which need to specify type */
-%type <type> expr type_name unaryExpr primaryExpr operand literal
+%type <type> expr type_name unaryExpr primaryExpr conversionExpr indexExpr operand literal
 %type <op_type> assign_op
 
 /* Precedence from low to high */
@@ -71,9 +71,6 @@
 %left '<' '>' GEQ LEQ EQL NEQ
 %left '+' '-'
 %left '*' '/' '%'
-%left '!'
-%left ']'
-%left ')'
 
 /* Yacc will start at this nonterminal */
 %start program
@@ -100,10 +97,27 @@ stmt
     | NEWLINE
     ;
 
+expr
+    : expr LOR expr     { $$ = "bool"; check_operation(get_type($1), get_type($3), "LOR"); printf("LOR\n"); }
+    | expr LAND expr    { $$ = "bool"; check_operation(get_type($1), get_type($3), "LAND"); printf("LAND\n"); }
+    | expr '<' expr     { $$ = "bool"; printf("LSS\n"); }
+    | expr '>' expr     { $$ = "bool"; printf("GTR\n"); }
+    | expr GEQ expr     { $$ = "bool"; printf("GEQ\n"); }
+    | expr LEQ expr     { $$ = "bool"; printf("LEQ\n"); }
+    | expr EQL expr     { $$ = "bool"; printf("EQL\n"); }
+    | expr NEQ expr     { $$ = "bool"; printf("NEQ\n"); }
+    | expr '+' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "ADD"); printf("ADD\n"); }
+    | expr '-' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "SUB"); printf("SUB\n"); }
+    | expr '*' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "MUL"); printf("MUL\n"); }
+    | expr '/' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "QUO"); printf("QUO\n"); }
+    | expr '%' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "REM"); printf("REM\n"); }
+    | unaryExpr         { $$ = $1; }
+    ;
+
 dcl
-    : VAR IDENT type_name '=' expr  { bool isArray = false; insert_symbol($2, isArray, $3); }
-    | VAR IDENT type_name           { bool isArray = false; insert_symbol($2, isArray, $3); }
-    | VAR IDENT indexExpr type_name { bool isArray = true; insert_symbol($2, isArray, $4); }
+    : VAR IDENT type_name '=' expr      { bool isArray = false; insert_symbol($2, isArray, $3); }
+    | VAR IDENT type_name               { bool isArray = false; insert_symbol($2, isArray, $3); }
+    | VAR IDENT indexExpr type_name     { bool isArray = true; insert_symbol($2, isArray, $4); }
     ;
 
 type_name
@@ -115,12 +129,12 @@ type_name
 
 indexExpr
     : '[' expr ']'
-    | primaryExpr '[' expr ']'
+    | primaryExpr '[' expr ']'      { $$ = $1; }
     ;
 
 simpleStmt
     : assignmentStmt
-    | exprStmt
+    | expr
     | incDecStmt
     ;
 
@@ -129,11 +143,11 @@ block
     ;
 
 left_brace
-    : '{'           { scope++; create_table(); }
+    : '{'       { scope++; create_table(); }
     ;
 
 right_brace
-    : '}'           { dump_symbol(); scope--; }
+    : '}'       { dump_symbol(); scope--; }
     ;
 
 ifStmt
@@ -168,29 +182,6 @@ assignmentStmt
     | expr '=' expr         { check_operation(get_type($1), get_type($3), "ASSIGN"); printf("ASSIGN\n"); }
     ;
 
-exprStmt
-    : expr
-    ;
-
-expr
-    : expr LOR expr     { $$ = "bool"; check_operation(get_type($1), get_type($3), "LOR"); printf("LOR\n"); }
-    | expr LAND expr    { $$ = "bool"; check_operation(get_type($1), get_type($3), "LAND"); printf("LAND\n"); }
-    | expr '<' expr     { $$ = "bool"; printf("LSS\n"); }
-    | expr '>' expr     { $$ = "bool"; printf("GTR\n"); }
-    | expr GEQ expr     { $$ = "bool"; printf("GEQ\n"); }
-    | expr LEQ expr     { $$ = "bool"; printf("LEQ\n"); }
-    | expr EQL expr     { $$ = "bool"; printf("EQL\n"); }
-    | expr NEQ expr     { $$ = "bool"; printf("NEQ\n"); }
-    | expr '+' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "ADD"); printf("ADD\n"); }
-    | expr '-' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "SUB"); printf("SUB\n"); }
-    | expr '*' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "MUL"); printf("MUL\n"); }
-    | expr '/' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "QUO"); printf("QUO\n"); }
-    | expr '%' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "REM"); printf("REM\n"); }
-    | unaryExpr         { $$ = $1; }
-    | literal           { $$ = $1; }
-    | IDENT             { $$ = lookup_symbol($1); }
-    ;
-
 unaryExpr
     : primaryExpr       { $$ = $1; }
     | '+' unaryExpr     { $$ = $2; printf("POS\n"); }
@@ -200,8 +191,8 @@ unaryExpr
 
 primaryExpr
     : operand           { $$ = $1; }
-    | indexExpr
-    | conversionExpr
+    | indexExpr         { $$ = $1; }
+    | conversionExpr    { $$ = $1; }
     ;
 
 operand
@@ -211,14 +202,14 @@ operand
     ;
 
 conversionExpr
-    : type_name '(' expr ')'    { printf("%c to %c\n", abbr($3), abbr($1)); }
+    : type_name '(' expr ')'    { $$ = $1; printf("%c to %c\n", abbr($3), abbr($1)); }
     ;
 
 literal
     : INT_LIT               { $$ = "int32_lit"; printf("INT_LIT %d\n", $1); }
     | FLOAT_LIT             { $$ = "float32_lit"; printf("FLOAT_LIT %f\n", $1); }
     | BOOL_LIT              { $$ = "bool_lit"; printf("%s\n", $1); }
-    | '"' STRING_LIT '"'    { $$ = "string_lit"; printf("STRING_LIT %s\n", $2); }
+    | '"' STRING_LIT '"'    { $$ = "string_lit"; printf("STRING_LIT %s\n", $2); free($2); }
     ;
 
 assign_op
@@ -251,7 +242,7 @@ int main(int argc, char *argv[])
     }
 
     yylineno = 0;
-    create_table(); /* create the first table */
+    create_table(); /* Creates the first table */
     yyparse();
     dump_symbol();
 
@@ -264,7 +255,7 @@ int main(int argc, char *argv[])
 static void create_table() {
     Table *newTable = malloc(sizeof(Table));
     
-    /* Initialize the new table */
+    /* Initializes the new table */
     newTable->scope = scope;
     newTable->firstSymbol = NULL;
     newTable->nextTable = NULL;
@@ -291,27 +282,27 @@ static void insert_symbol(char *name, bool isArray, char *type) {
         }
     }
     
+    /* Creates a new symbol */
     Symbol *newSymbol = malloc(sizeof(Symbol));
-
-    /* Initialize newSymbol */
-    newSymbol->name = strdup(name);
+    // newSymbol->name = strdup(name);
+    newSymbol->name = name;
     newSymbol->address = address++;
     newSymbol->nextSymbol = NULL;
     if (isArray) {
         newSymbol->lineno = yylineno + 1;
-        newSymbol->type = "array";
+        newSymbol->type = strdup("array");
         newSymbol->elementType = strdup(type);
     } else {
         newSymbol->lineno = yylineno;
         newSymbol->type = strdup(type);
-        newSymbol->elementType = "-";
+        newSymbol->elementType = strdup("-");
     }
 
     if (currentTable->firstSymbol == NULL) {
         currentTable->firstSymbol = newSymbol;
     } else {
+        /* Gets the last symbol of the current table */
         Symbol *currentSymbol;
-        /* Get the last symbol of the current table */
         for (currentSymbol = currentTable->firstSymbol; currentSymbol->nextSymbol != NULL; currentSymbol = currentSymbol->nextSymbol)
             ;
         currentSymbol->nextSymbol = newSymbol;
@@ -322,8 +313,8 @@ static void insert_symbol(char *name, bool isArray, char *type) {
 
 /* Looks up an entry in the symbol table */
 static char *lookup_symbol(char *symbol) {
+    /* Finds the matched symbol in the symbol tables */
     Table *table;
-
     for (table = currentTable; table != NULL; table = table->prevTable) {
         Symbol *currentSymbol;
         for (currentSymbol = table->firstSymbol; currentSymbol != NULL; currentSymbol = currentSymbol->nextSymbol) {
@@ -340,7 +331,7 @@ static char *lookup_symbol(char *symbol) {
         }
     }
 
-    /* Error: undefined symbol */
+    /* Undefined symbol */
     printf("error:%d: undefined: %s\n", yylineno + 1, symbol);
     return "undefined";
 }
@@ -351,13 +342,23 @@ static void dump_symbol() {
     printf("%-10s%-10s%-10s%-10s%-10s%s\n",
            "Index", "Name", "Type", "Address", "Lineno", "Element type");
     
+    /* Prints all the symbols in the current scope */
+    Symbol *currentSymbol, *dumpedSymbol;
     int index = 0;
-    Symbol *currentSymbol;
-    for (currentSymbol = currentTable->firstSymbol; currentSymbol != NULL; currentSymbol = currentSymbol->nextSymbol) {
+    for (currentSymbol = currentTable->firstSymbol; currentSymbol != NULL;) {
         printf("%-10d%-10s%-10s%-10d%-10d%s\n",
             index++, currentSymbol->name, currentSymbol->type, currentSymbol->address, currentSymbol->lineno, currentSymbol->elementType);
+        
+        /* Shifts to the next symbol and releases memory */
+        dumpedSymbol = currentSymbol;
+        currentSymbol = currentSymbol->nextSymbol;
+        free(dumpedSymbol->name);
+        free(dumpedSymbol->type);
+        free(dumpedSymbol->elementType);
+        free(dumpedSymbol);
     }
 
+    /* Deletes the current table and releases the memory */
     Table *prevTable = currentTable->prevTable;
     free(currentTable);
     currentTable = prevTable;
@@ -383,6 +384,7 @@ static char *get_type(char *type) {
         return "bool";
     if (strcmp(type, "string") == 0 || strcmp(type, "string_lit") == 0)
         return "string";
+    
     return "undefined";
 }
 
@@ -422,7 +424,7 @@ static void check_operation(char *left_type, char *right_type, char *op) {
 }
 
 static void check_assignment(char *left_type, char *right_type, char *op) {
-    /* Assign value to literal */
+    /* Assigning value to literal */
     bool isLiteral = strcmp(left_type, "int32_lit") == 0 ||
                      strcmp(left_type, "float32_lit") == 0 ||
                      strcmp(left_type, "bool_lit") == 0 ||
@@ -432,7 +434,7 @@ static void check_assignment(char *left_type, char *right_type, char *op) {
         return;
     }
 
-    /* Assign value to different type */
+    /* Assigning value to different type of symbol */
     if (strcmp(left_type, right_type) != 0) {
         printf("error:%d: cannot assign to %s\n", yylineno, get_type(left_type));
         return;

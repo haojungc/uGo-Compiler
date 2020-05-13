@@ -164,7 +164,7 @@ postStmt
     ;
 
 assignmentStmt
-    : expr assign_op expr   { check_assignment(get_type($1), get_type($3), $2); printf("%s\n", $2); }
+    : expr assign_op expr   { check_assignment($1, get_type($3), $2); printf("%s\n", $2); }
     | expr '=' expr         { check_operation(get_type($1), get_type($3), "ASSIGN"); printf("ASSIGN\n"); }
     ;
 
@@ -422,10 +422,19 @@ static void check_operation(char *left_type, char *right_type, char *op) {
 }
 
 static void check_assignment(char *left_type, char *right_type, char *op) {
-    /* Invalid assignment */
+    /* Assign value to literal */
+    bool isLiteral = strcmp(left_type, "int32_lit") == 0 ||
+                     strcmp(left_type, "float32_lit") == 0 ||
+                     strcmp(left_type, "bool_lit") == 0 ||
+                     strcmp(left_type, "string_lit") == 0;
+    if (isLiteral) {
+        printf("error:%d: cannot assign to %s\n", yylineno, get_type(left_type));
+        return;
+    }
+
+    /* Assign value to different type */
     if (strcmp(left_type, right_type) != 0) {
-        printf("error:%d: invalid operation: %s (mismatched types %s and %s)\n", 
-                yylineno, op, left_type, right_type);
+        printf("error:%d: cannot assign to %s\n", yylineno, get_type(left_type));
         return;
     }
 }

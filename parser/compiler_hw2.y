@@ -91,6 +91,7 @@ stmt
     | simpleStmt NEWLINE
     | block NEWLINE
     | ifStmt NEWLINE
+    | forStmt NEWLINE
     | printStmt NEWLINE
     | NEWLINE
     ;
@@ -139,6 +140,23 @@ ifStmt
 
 condition
     : expr
+    ;
+
+forStmt
+    : FOR condition block
+    | FOR forClause block
+    ;
+
+forClause
+    : initStmt ';' condition ';' postStmt
+    ;
+
+initStmt
+    : simpleStmt
+    ;
+
+postStmt
+    : simpleStmt
     ;
 
 assignmentStmt

@@ -83,15 +83,23 @@ fnumber ({digit}*\.{digit}+)
 "float32"   { return FLOAT;}
 "string"    { return STRING; }
 "bool"      { return BOOL; }
-"true"      { XXX; }
-"false"     { XXX; }
+"true"      { yylval.s_val = "TRUE";
+                return BOOL_LIT;
+            }
+"false"     { yylval.s_val = "FALSE";
+                return BOOL_LIT;
+            }
 "var"       { return VAR; }
 
 {inumber}   { yylval.i_val = atoi(yytext);
                 return INT_LIT;
             }
-{fnumber}   { XXX; }
-{id}        { XXX; }
+{fnumber}   { yylval.f_val = atof(yytext);
+                return FLOAT_LIT;
+            }
+{id}        { yylval.s_val = strdup(yytext);
+                return IDENT;
+            }
 
 <<EOF>>     { static int once = 0;
                 if (once++) {

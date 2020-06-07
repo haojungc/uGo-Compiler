@@ -17,6 +17,7 @@
     static void create_table();
     static int insert_symbol(char*, bool, char*);       /* insert_symbol(id, isArray, typeName): Returns the address of the symbol */
     static char *lookup_symbol(char*);                  /* Returns the type name of the symbol */
+    static char *lookup_symbol_address(char*, int*);    /* lookup_symbol_address(symbol, symbol_address): Returns the type name of the symbol */
     static void dump_symbol();
     static char abbr(char*);                            /* Gets the abbreviation of type name */
     static char *get_type(char*);                       /* Converts literal type to type name */
@@ -257,7 +258,24 @@ dcl
         }
         fprintf(assembly_file, "\t%s %d\n", store_type, address);
     }
-    | VAR IDENT type_name               { bool isArray = false; insert_symbol($2, isArray, $3); }
+    | VAR IDENT type_name               {
+        char *type = $3;
+        bool isArray = false;
+        int address = insert_symbol($2, isArray, type); 
+
+        switch (abbr(type)) {
+            case 'I':
+                fprintf(assembly_file, "\t%s\n\t%s %d\n",
+                    "ldc 0",
+                    "istore", address);
+            break;
+            case 'S':
+                fprintf(assembly_file, "\t%s\n\t%s %d\n",
+                    "ldc \"\"",
+                    "astore", address);
+            break;
+        }
+    }
     | VAR IDENT indexExpr type_name     { bool isArray = true; insert_symbol($2, isArray, $4); }
     ;
 
@@ -319,8 +337,106 @@ postStmt
     ;
 
 assignmentStmt
-    : expr assign_op expr   { check_assignment($1, get_type($3), $2); printf("%s\n", $2); }
-    | expr '=' expr         { check_operation(get_type($1), get_type($3), "ASSIGN"); printf("ASSIGN\n"); }
+    : IDENT assign_op expr   { 
+        int address;
+        char *assign_op = $2,
+             *type = lookup_symbol_address($1, &address);
+        check_assignment(get_type(type), get_type($3), assign_op); 
+        printf("%s\n", assign_op); 
+
+        if (address != -1) {
+            char *load_type,
+                 *store_type,
+                 *op;
+
+            if (strcmp(assign_op, "ADD_ASSIGN") == 0) {
+                switch (abbr(type)) {
+                    case 'I':
+                        load_type = "iload";
+                        store_type = "istore";
+                        op = "iadd";
+                    break;
+                    case 'F':
+                        load_type = "fload";
+                        store_type = "fstore";
+                        op = "fadd";
+                    break;
+                }
+            } else if (strcmp(assign_op, "SUB_ASSIGN") == 0) {
+                switch (abbr(type)) {
+                    case 'I':
+                        load_type = "iload";
+                        store_type = "istore";
+                        op = "swap\n\tisub";
+                    break;
+                    case 'F':
+                        load_type = "fload";
+                        store_type = "fstore";
+                        op = "swap\n\tfsub";
+                    break;
+                }
+            } else if (strcmp(assign_op, "MUL_ASSIGN") == 0) {
+                switch (abbr(type)) {
+                    case 'I':
+                        load_type = "iload";
+                        store_type = "istore";
+                        op = "imul";
+                    break;
+                    case 'F':
+                        load_type = "fload";
+                        store_type = "fstore";
+                        op = "fmul";
+                    break;
+                }
+            } else if (strcmp(assign_op, "QUO_ASSIGN") == 0) {
+                switch (abbr(type)) {
+                    case 'I':
+                        load_type = "iload";
+                        store_type = "istore";
+                        op = "swap\n\tidiv";
+                    break;
+                    case 'F':
+                        load_type = "fload";
+                        store_type = "fstore";
+                        op = "swap\n\tfdiv";
+                    break;
+                }
+            } else if (strcmp(assign_op, "REM_ASSIGN") == 0) {
+                load_type = "iload";
+                store_type = "istore";
+                op = "swap\n\tirem";
+            }
+
+            fprintf(assembly_file, "\t%s %d\n\t%s\n\t%s %d\n", 
+                    load_type, address,
+                    op,
+                    store_type,
+                    address);
+        }
+    }
+    | IDENT '=' expr         {
+        int address;
+        char *type = lookup_symbol_address($1, &address),
+             *store_type;
+        check_operation(get_type(type), get_type($3), "ASSIGN"); 
+        printf("ASSIGN\n"); 
+
+        switch (abbr(type)) {
+            case 'I':
+            case 'B':
+                store_type = "istore";
+            break;
+            case 'F':
+                store_type = "fstore";
+            break;
+            case 'S':
+                store_type = "astore";
+            break;
+        }
+
+        if (address != -1)
+            fprintf(assembly_file, "\t%s %d\n", store_type, address);
+    }
     ;
 
 unaryExpr
@@ -352,13 +468,11 @@ operand
         $$ = type;
         switch (abbr(type)) {
             case 'I':
+            case 'B':
                 load_type = "iload";
             break;
             case 'F':
                 load_type = "fload";
-            break;
-            case 'B':
-                load_type = "iload";
             break;
             case 'S':
                 load_type = "aload";
@@ -592,6 +706,35 @@ static char *lookup_symbol(char *symbol) {
 
     /* Undefined symbol */
     symbol_address = -1;
+    printf("error:%d: undefined: %s\n", yylineno + 1, symbol);
+    error = true;
+
+    return "undefined";
+}
+
+/* Looks up an entry in the symbol table and gets its address */
+static char *lookup_symbol_address(char *symbol, int *address) {
+    /* Finds the matched symbol in the symbol tables */
+    Table *table;
+    for (table = currentTable; table != NULL; table = table->prevTable) {
+        Symbol *currentSymbol;
+        for (currentSymbol = table->firstSymbol; currentSymbol != NULL; currentSymbol = currentSymbol->nextSymbol) {
+            char *name = currentSymbol->name;
+            if (strcmp(name, symbol) == 0) {
+                *address = currentSymbol->address;
+                printf("IDENT (name=%s, address=%d)\n", symbol, currentSymbol->address);
+                
+                char *type = currentSymbol->type;
+                if (strcmp(type, "array") == 0) {
+                    return currentSymbol->elementType;
+                }
+                return currentSymbol->type;
+            }
+        }
+    }
+
+    /* Undefined symbol */
+    *address = -1;
     printf("error:%d: undefined: %s\n", yylineno + 1, symbol);
     error = true;
 

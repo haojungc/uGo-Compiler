@@ -262,7 +262,7 @@ int main(int argc, char *argv[])
 
 	printf("Total lines: %d\n", yylineno);
 
-    if (error == true) remove(file_name);
+    if (error) remove(file_name);
     else fprintf(assembly_file, "\t%s\n%s", "return", ".end method");
     fclose(assembly_file);
     fclose(yyin);

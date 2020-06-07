@@ -34,6 +34,7 @@
     FILE *assembly_file;
     char *file_name = "hw3.j";
     bool error = false;
+    int cmp_count = 0;
 %}
 
 %error-verbose
@@ -103,14 +104,104 @@ stmt
     ;
 
 expr
-    : expr LOR expr     { $$ = "bool"; check_operation(get_type($1), get_type($3), "LOR"); printf("LOR\n"); }
-    | expr LAND expr    { $$ = "bool"; check_operation(get_type($1), get_type($3), "LAND"); printf("LAND\n"); }
-    | expr '<' expr     { $$ = "bool"; printf("LSS\n"); }
-    | expr '>' expr     { $$ = "bool"; printf("GTR\n"); }
-    | expr GEQ expr     { $$ = "bool"; printf("GEQ\n"); }
-    | expr LEQ expr     { $$ = "bool"; printf("LEQ\n"); }
-    | expr EQL expr     { $$ = "bool"; printf("EQL\n"); }
-    | expr NEQ expr     { $$ = "bool"; printf("NEQ\n"); }
+    : expr LOR expr     { $$ = "bool"; check_operation(get_type($1), get_type($3), "LOR"); printf("LOR\n"); fprintf(assembly_file, "\tior\n"); }
+    | expr LAND expr    { $$ = "bool"; check_operation(get_type($1), get_type($3), "LAND"); printf("LAND\n"); fprintf(assembly_file, "\tiand\n"); }
+    | expr '<' expr     { 
+        $$ = "bool";
+        printf("LSS\n"); 
+        
+        char type = abbr($1);
+        bool isInt32 = (type == 'I');
+        fprintf(assembly_file, "\t%s\n%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+                isInt32 ? "isub" : "fsub\n\tf2i",
+                "iflt L_cmp_", cmp_count,
+                "iconst_0",
+                "goto L_cmp_", cmp_count + 1,
+                "L_cmp_", cmp_count, ':',
+                "iconst_1",
+                "L_cmp_", cmp_count + 1, ':');
+        cmp_count += 2;
+    }
+    | expr '>' expr     { 
+        $$ = "bool"; 
+        printf("GTR\n"); 
+        
+        char type = abbr($1);
+        bool isInt32 = (type == 'I');
+        fprintf(assembly_file, "\t%s\n%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+                isInt32 ? "isub" : "fsub\n\tf2i",
+                "ifgt L_cmp_", cmp_count,
+                "iconst_0",
+                "goto L_cmp_", cmp_count + 1,
+                "L_cmp_", cmp_count, ':',
+                "iconst_1",
+                "L_cmp_", cmp_count + 1, ':');
+        cmp_count += 2;
+    }
+    | expr GEQ expr     { 
+        $$ = "bool"; 
+        printf("GEQ\n"); 
+        
+        char type = abbr($1);
+        bool isInt32 = (type == 'I');
+        fprintf(assembly_file, "\t%s\n%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+                isInt32 ? "isub" : "fsub\n\tf2i",
+                "ifge L_cmp_", cmp_count,
+                "iconst_0",
+                "goto L_cmp_", cmp_count + 1,
+                "L_cmp_", cmp_count, ':',
+                "iconst_1",
+                "L_cmp_", cmp_count + 1, ':');
+        cmp_count += 2;
+    }
+    | expr LEQ expr     { 
+        $$ = "bool"; 
+        printf("LEQ\n"); 
+        
+        char type = abbr($1);
+        bool isInt32 = (type == 'I');
+        fprintf(assembly_file, "\t%s\n%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+                isInt32 ? "isub" : "fsub\n\tf2i",
+                "ifle L_cmp_", cmp_count,
+                "iconst_0",
+                "goto L_cmp_", cmp_count + 1,
+                "L_cmp_", cmp_count, ':',
+                "iconst_1",
+                "L_cmp_", cmp_count + 1, ':');
+        cmp_count += 2;
+    }
+    | expr EQL expr     { 
+        $$ = "bool"; 
+        printf("EQL\n"); 
+        
+        char type = abbr($1);
+        bool isInt32 = (type == 'I');
+        fprintf(assembly_file, "\t%s\n%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+                isInt32 ? "isub" : "fsub\n\tf2i",
+                "ifeq L_cmp_", cmp_count,
+                "iconst_0",
+                "goto L_cmp_", cmp_count + 1,
+                "L_cmp_", cmp_count, ':',
+                "iconst_1",
+                "L_cmp_", cmp_count + 1, ':');
+        cmp_count += 2;
+    }
+    | expr NEQ expr     { 
+        $$ = "bool"; 
+        printf("NEQ\n"); 
+        
+        char type = abbr($1);
+        bool isInt32 = (type == 'I');
+        fprintf(assembly_file, "\t%s\n%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+                isInt32 ? "isub" : "fsub\n\tf2i",
+                "ifne L_cmp_", cmp_count,
+                "iconst_0",
+                "goto L_cmp_", cmp_count + 1,
+                "L_cmp_", cmp_count, ':',
+                "iconst_1",
+                "L_cmp_", cmp_count + 1, ':');
+        cmp_count += 2;
+    }
     | expr '+' expr     { 
         $$ = $1; 
         check_operation(get_type($1), get_type($3), "ADD"); 
@@ -235,8 +326,15 @@ assignmentStmt
 unaryExpr
     : primaryExpr       { $$ = $1; }
     | '+' unaryExpr     { $$ = $2; printf("POS\n"); }
-    | '-' unaryExpr     { $$ = $2; printf("NEG\n"); fprintf(assembly_file, "\t%s\n", (strcmp(get_type($2), "int") == 0) ? "ineg" : "fneg"); }
-    | '!' unaryExpr     { $$ = $2; printf("NOT\n"); fprintf(assembly_file, "\t%s\n", "ixor"); }
+    | '-' unaryExpr     { 
+        char *type = $2;
+        $$ = type;
+        printf("NEG\n");
+
+        bool isInt32 = (abbr(type) == 'I');
+        fprintf(assembly_file, "\t%s\n", isInt32 ? "ineg" : "fneg"); 
+    }
+    | '!' unaryExpr     { $$ = $2; printf("NOT\n"); fprintf(assembly_file, "\t%s\n\t%s\n", "iconst_1", "ixor"); }
     ;
 
 primaryExpr
@@ -320,12 +418,13 @@ printStmt
 
         switch (abbr(type)) {
             case 'B':
-                fprintf(assembly_file, "\t%s\n\t%s\n\t%s\n",
-                    "ifne L_cmp_0",
+                fprintf(assembly_file, "\t%s%d\n\t%s\n\t%s%d\n",
+                    "ifne L_cmp_", cmp_count,
                     "ldc \"false\"",
-                    "goto L_cmp_1");
-                fprintf(assembly_file, "%s\n\t%s\n", "L_cmp_0:", "ldc \"true\"");
-                fprintf(assembly_file, "%s\n", "L_cmp_1:");
+                    "goto L_cmp_", cmp_count + 1);
+                fprintf(assembly_file, "%s%d%c\n\t%s\n", "L_cmp_", cmp_count, ':', "ldc \"true\"");
+                fprintf(assembly_file, "%s%d%c\n", "L_cmp_", cmp_count + 1, ':');
+                cmp_count += 2;
             case 'S':
                 print_param = "Ljava/lang/String;";
             break;
@@ -348,12 +447,13 @@ printStmt
         
         switch (abbr(type)) {
             case 'B':
-                fprintf(assembly_file, "\t%s\n\t%s\n\t%s\n",
-                    "ifne L_cmp_0",
+                fprintf(assembly_file, "\t%s%d\n\t%s\n\t%s%d\n",
+                    "ifne L_cmp_", cmp_count,
                     "ldc \"false\"",
-                    "goto L_cmp_1");
-                fprintf(assembly_file, "%s\n\t%s\n", "L_cmp_0:", "ldc \"true\"");
-                fprintf(assembly_file, "%s\n", "L_cmp_1:");
+                    "goto L_cmp_", cmp_count + 1);
+                fprintf(assembly_file, "%s%d%c\n\t%s\n", "L_cmp_", cmp_count, ':', "ldc \"true\"");
+                fprintf(assembly_file, "%s%d%c\n", "L_cmp_", cmp_count + 1, ':');
+                cmp_count += 2;
             case 'S':
                 print_param = "Ljava/lang/String;";
             break;

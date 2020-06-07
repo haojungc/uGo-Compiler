@@ -29,6 +29,10 @@
 
     int address = 0;
     int scope = 0;
+
+    FILE *assembly_file;
+    char *file_name = "hw3.j";
+    bool error = false;
 %}
 
 %error-verbose
@@ -241,12 +245,26 @@ int main(int argc, char *argv[])
         yyin = stdin;
     }
 
+    /* Setup Jasmin program */
+    assembly_file = fopen(file_name, "w");
+    fprintf(assembly_file, "%s\n%s\n%s\n%s\n%s\n%s\n\n",
+            ".source hw3.j",
+            ".class public Main",
+            ".super java/lang/Object",
+            ".method public static main([Ljava/lang/String;)V",
+            ".limit stack 100 ; Define your storage size.",
+            ".limit locals 100 ; Define your local space number.");       
+
     yylineno = 0;
     create_table(); /* Creates the first table */
     yyparse();
     dump_symbol();
 
 	printf("Total lines: %d\n", yylineno);
+
+    if (error == true) remove(file_name);
+    else fprintf(assembly_file, "\t%s\n%s", "return", ".end method");
+    fclose(assembly_file);
     fclose(yyin);
     return 0;
 }
@@ -278,6 +296,7 @@ static void insert_symbol(char *name, bool isArray, char *type) {
         char *_name = currentSymbol->name;
         if (strcmp(_name, name) == 0) {
             printf("error:%d: %s redeclared in this block. previous declaration at line %d\n", yylineno, _name, currentSymbol->lineno);
+            error = true;
             return;
         }
     }
@@ -332,6 +351,8 @@ static char *lookup_symbol(char *symbol) {
 
     /* Undefined symbol */
     printf("error:%d: undefined: %s\n", yylineno + 1, symbol);
+    error = true;
+
     return "undefined";
 }
 
@@ -400,6 +421,7 @@ static void check_operation(char *left_type, char *right_type, char *op) {
         char *invalid_type = (left_isBool) ? right_type : left_type;
         printf("error:%d: invalid operation: (operator %s not defined on %s)\n", 
                 yylineno, op, invalid_type);
+        error = true;
         return;
     }
 
@@ -411,6 +433,7 @@ static void check_operation(char *left_type, char *right_type, char *op) {
         char *invalid_type = (left_isInt32) ? right_type : left_type;
         printf("error:%d: invalid operation: (operator REM not defined on %s)\n", 
                 yylineno, invalid_type);
+        error = true;
         return;
     }
 
@@ -418,6 +441,7 @@ static void check_operation(char *left_type, char *right_type, char *op) {
     if (strcmp(left_type, right_type) != 0) {
         printf("error:%d: invalid operation: %s (mismatched types %s and %s)\n", 
                 yylineno, op, left_type, right_type);
+        error = true;
         return;
     }
 }
@@ -430,18 +454,22 @@ static void check_assignment(char *left_type, char *right_type, char *op) {
                      strcmp(left_type, "string_lit") == 0;
     if (isLiteral) {
         printf("error:%d: cannot assign to %s\n", yylineno, get_type(left_type));
+        error = true;
         return;
     }
 
     /* Assigning value to different type of symbol */
     if (strcmp(left_type, right_type) != 0) {
         printf("error:%d: cannot assign to %s\n", yylineno, get_type(left_type));
+        error = true;
         return;
     }
 }
 
 /* Checks if the type is boolean */
 static void check_condition(char *type) {
-    if (strcmp(type, "bool") != 0)
+    if (strcmp(type, "bool") != 0) {
         printf("error:%d: non-bool (type %s) used as for condition\n", yylineno + 1, type);
+        error = true;
+    }
 }

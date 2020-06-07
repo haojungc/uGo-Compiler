@@ -15,7 +15,7 @@
 
     /* Symbol table function - you can add new function if needed. */
     static void create_table();
-    static void insert_symbol(char*, bool, char*);      /* insert_symbol(id, isArray, typeName) */
+    static int insert_symbol(char*, bool, char*);       /* insert_symbol(id, isArray, typeName): Returns the address of the symbol */
     static char *lookup_symbol(char*);                  /* Returns the type name of the symbol */
     static void dump_symbol();
     static char abbr(char*);                            /* Gets the abbreviation of type name */
@@ -27,7 +27,8 @@
     Table *firstTable = NULL;
     Table *currentTable = NULL;
 
-    int address = 0;
+    int address = 0;    /* Global symbol address */
+    int symbol_address; /* Stores the global address of a symbol */
     int scope = 0;
 
     FILE *assembly_file;
@@ -92,13 +93,13 @@ stmts
     ;
 
 stmt
-    : dcl NEWLINE
-    | simpleStmt NEWLINE
-    | block NEWLINE
-    | ifStmt NEWLINE
-    | forStmt NEWLINE
-    | printStmt NEWLINE
-    | NEWLINE
+    : dcl NEWLINE           { fprintf(assembly_file, "\n"); }
+    | simpleStmt NEWLINE    { fprintf(assembly_file, "\n"); }
+    | block NEWLINE         { fprintf(assembly_file, "\n"); }
+    | ifStmt NEWLINE        { fprintf(assembly_file, "\n"); }
+    | forStmt NEWLINE       { fprintf(assembly_file, "\n"); }
+    | printStmt NEWLINE     { fprintf(assembly_file, "\n"); }
+    | NEWLINE               { fprintf(assembly_file, "\n"); }
     ;
 
 expr
@@ -110,16 +111,61 @@ expr
     | expr LEQ expr     { $$ = "bool"; printf("LEQ\n"); }
     | expr EQL expr     { $$ = "bool"; printf("EQL\n"); }
     | expr NEQ expr     { $$ = "bool"; printf("NEQ\n"); }
-    | expr '+' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "ADD"); printf("ADD\n"); }
-    | expr '-' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "SUB"); printf("SUB\n"); }
-    | expr '*' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "MUL"); printf("MUL\n"); }
-    | expr '/' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "QUO"); printf("QUO\n"); }
-    | expr '%' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "REM"); printf("REM\n"); }
+    | expr '+' expr     { 
+        $$ = $1; 
+        check_operation(get_type($1), get_type($3), "ADD"); 
+        printf("ADD\n"); 
+        char *op = (strcmp(get_type($1), "int32") == 0) ? "iadd" : "fadd";
+        fprintf(assembly_file, "\t%s\n", op); 
+    }
+    | expr '-' expr     { 
+        $$ = $1; 
+        check_operation(get_type($1), get_type($3), "SUB"); 
+        printf("SUB\n");
+        char *op = (strcmp(get_type($1), "int32") == 0) ? "isub" : "fsub";
+        fprintf(assembly_file, "\t%s\n", op); 
+    }
+    | expr '*' expr     { 
+        $$ = $1; 
+        check_operation(get_type($1), get_type($3), "MUL"); 
+        printf("MUL\n"); 
+        char *op = (strcmp(get_type($1), "int32") == 0) ? "imul" : "fmul";
+        fprintf(assembly_file, "\t%s\n", op);
+    }
+    | expr '/' expr     { 
+        $$ = $1; 
+        check_operation(get_type($1), get_type($3), "QUO"); 
+        printf("QUO\n"); 
+        char *op = (strcmp(get_type($1), "int32") == 0) ? "idiv" : "fdiv";
+        fprintf(assembly_file, "\t%s\n", op);
+    }
+    | expr '%' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "REM"); printf("REM\n"); fprintf(assembly_file, "\t%s\n", "irem"); }
     | unaryExpr         { $$ = $1; }
     ;
 
 dcl
-    : VAR IDENT type_name '=' expr      { bool isArray = false; insert_symbol($2, isArray, $3); }
+    : VAR IDENT type_name '=' expr      { 
+        char *type = $3,
+             *store_type;
+        bool isArray = false;
+        int address = insert_symbol($2, isArray, type);
+
+        switch (abbr(type)) {
+            case 'I':
+                store_type = "istore";
+            break;
+            case 'F':
+                store_type = "fstore";
+            break;
+            case 'B':
+                store_type = "istore";
+            break;
+            case 'S':
+                store_type = "astore";
+            break;
+        }
+        fprintf(assembly_file, "\t%s %d\n", store_type, address);
+    }
     | VAR IDENT type_name               { bool isArray = false; insert_symbol($2, isArray, $3); }
     | VAR IDENT indexExpr type_name     { bool isArray = true; insert_symbol($2, isArray, $4); }
     ;
@@ -189,8 +235,8 @@ assignmentStmt
 unaryExpr
     : primaryExpr       { $$ = $1; }
     | '+' unaryExpr     { $$ = $2; printf("POS\n"); }
-    | '-' unaryExpr     { $$ = $2; printf("NEG\n"); }
-    | '!' unaryExpr     { $$ = $2; printf("NOT\n"); }
+    | '-' unaryExpr     { $$ = $2; printf("NEG\n"); fprintf(assembly_file, "\t%s\n", (strcmp(get_type($2), "int") == 0) ? "ineg" : "fneg"); }
+    | '!' unaryExpr     { $$ = $2; printf("NOT\n"); fprintf(assembly_file, "\t%s\n", "ixor"); }
     ;
 
 primaryExpr
@@ -202,7 +248,27 @@ primaryExpr
 operand
     : literal           { $$ = $1; }
     | '(' expr ')'      { $$ = $2; }
-    | IDENT             { $$ = lookup_symbol($1); }
+    | IDENT             { 
+        char *type = lookup_symbol($1),
+             *load_type;
+        $$ = type;
+        switch (abbr(type)) {
+            case 'I':
+                load_type = "iload";
+            break;
+            case 'F':
+                load_type = "fload";
+            break;
+            case 'B':
+                load_type = "iload";
+            break;
+            case 'S':
+                load_type = "aload";
+            break;
+        }
+        if (symbol_address != -1)
+            fprintf(assembly_file, "\t%s %d\n", load_type, symbol_address);
+    }
     ;
 
 conversionExpr
@@ -210,10 +276,15 @@ conversionExpr
     ;
 
 literal
-    : INT_LIT               { $$ = "int32_lit"; printf("INT_LIT %d\n", $1); }
-    | FLOAT_LIT             { $$ = "float32_lit"; printf("FLOAT_LIT %f\n", $1); }
-    | BOOL_LIT              { $$ = "bool_lit"; printf("%s\n", $1); }
-    | '"' STRING_LIT '"'    { $$ = "string_lit"; printf("STRING_LIT %s\n", $2); free($2); }
+    : INT_LIT               { $$ = "int32_lit"; printf("INT_LIT %d\n", $1); fprintf(assembly_file, "\tldc %d\n", $1); }
+    | FLOAT_LIT             { $$ = "float32_lit"; printf("FLOAT_LIT %f\n", $1); fprintf(assembly_file, "\tldc %f\n", $1); }
+    | BOOL_LIT              { 
+        $$ = "bool_lit"; 
+        printf("%s\n", $1); 
+        char *s = (strcmp($1, "TRUE") == 0) ? "iconst_1" : "iconst_0";
+        fprintf(assembly_file, "\t%s\n", s);
+    }
+    | '"' STRING_LIT '"'    { $$ = "string_lit"; printf("STRING_LIT %s\n", $2); fprintf(assembly_file, "\tldc \"%s\"\n", $2); free($2); }
     ;
 
 assign_op
@@ -225,13 +296,79 @@ assign_op
     ;
 
 incDecStmt
-    : expr INC      { printf("INC\n"); }
-    | expr DEC      { printf("DEC\n"); }
+    : expr INC      { 
+        printf("INC\n");
+        bool isInt32 = (strcmp($1, "int32") == 0);
+        char *op = isInt32 ? "iadd" : "i2f\n\tfadd",
+             *store_type = isInt32 ? "istore" : "fstore";
+        fprintf(assembly_file, "\t%s\n\t%s\n\t%s %d\n", "ldc 1", op, store_type, symbol_address); 
+    }
+    | expr DEC      { 
+        printf("DEC\n"); 
+        bool isInt32 = (strcmp($1, "int32") == 0);
+        char *op = isInt32 ? "isub" : "i2f\n\tfsub",
+             *store_type = isInt32 ? "istore" : "fstore";
+        fprintf(assembly_file, "\t%s\n\t%s\n\t%s %d\n", "ldc 1", op, store_type, symbol_address); 
+    }
     ;
 
 printStmt
-    : PRINT '(' expr ')'    { printf("PRINT %s\n", get_type($3)); }
-    | PRINTLN '(' expr ')'  { printf("PRINTLN %s\n", get_type($3)); }
+    : PRINT '(' expr ')'    { 
+        char *type = get_type($3),
+             *print_param;
+        printf("PRINT %s\n", type);
+
+        switch (abbr(type)) {
+            case 'B':
+                fprintf(assembly_file, "\t%s\n\t%s\n\t%s\n",
+                    "ifne L_cmp_0",
+                    "ldc \"false\"",
+                    "goto L_cmp_1");
+                fprintf(assembly_file, "%s\n\t%s\n", "L_cmp_0:", "ldc \"true\"");
+                fprintf(assembly_file, "%s\n", "L_cmp_1:");
+            case 'S':
+                print_param = "Ljava/lang/String;";
+            break;
+            case 'I':
+                print_param = "I";
+            break;
+            case 'F':
+                print_param = "F";
+            break;
+        }
+        fprintf(assembly_file, "\t%s\n\t%s\n\t%s%s%s\n",
+                "getstatic java/lang/System/out Ljava/io/PrintStream;",
+                "swap",
+                "invokevirtual java/io/PrintStream/print(", print_param, ")V");
+    }
+    | PRINTLN '(' expr ')'  { 
+        char *type = get_type($3),
+             *print_param;
+        printf("PRINTLN %s\n", type); 
+        
+        switch (abbr(type)) {
+            case 'B':
+                fprintf(assembly_file, "\t%s\n\t%s\n\t%s\n",
+                    "ifne L_cmp_0",
+                    "ldc \"false\"",
+                    "goto L_cmp_1");
+                fprintf(assembly_file, "%s\n\t%s\n", "L_cmp_0:", "ldc \"true\"");
+                fprintf(assembly_file, "%s\n", "L_cmp_1:");
+            case 'S':
+                print_param = "Ljava/lang/String;";
+            break;
+            case 'I':
+                print_param = "I";
+            break;
+            case 'F':
+                print_param = "F";
+            break;
+        }
+        fprintf(assembly_file, "\t%s\n\t%s\n\t%s%s%s\n",
+                "getstatic java/lang/System/out Ljava/io/PrintStream;",
+                "swap",
+                "invokevirtual java/io/PrintStream/println(", print_param, ")V");
+    }
     ;
 
 %%
@@ -289,7 +426,7 @@ static void create_table() {
 }
 
 /* Inserts an entry for a variable declaration */
-static void insert_symbol(char *name, bool isArray, char *type) {
+static int insert_symbol(char *name, bool isArray, char *type) {
     /* Checks if the symbol is already declared in the same scope */
     Symbol *currentSymbol;
     for (currentSymbol = currentTable->firstSymbol; currentSymbol != NULL; currentSymbol = currentSymbol->nextSymbol) {
@@ -297,7 +434,7 @@ static void insert_symbol(char *name, bool isArray, char *type) {
         if (strcmp(_name, name) == 0) {
             printf("error:%d: %s redeclared in this block. previous declaration at line %d\n", yylineno, _name, currentSymbol->lineno);
             error = true;
-            return;
+            return -1;
         }
     }
     
@@ -306,6 +443,7 @@ static void insert_symbol(char *name, bool isArray, char *type) {
     newSymbol->name = name;
     newSymbol->address = address++;
     newSymbol->nextSymbol = NULL;
+
     if (isArray) {
         newSymbol->lineno = yylineno + 1;
         newSymbol->type = strdup("array");
@@ -327,6 +465,8 @@ static void insert_symbol(char *name, bool isArray, char *type) {
     }
 
     printf("> Insert {%s} into symbol table (scope level: %d)\n", name, scope);
+
+    return newSymbol->address;
 }
 
 /* Looks up an entry in the symbol table */
@@ -338,6 +478,7 @@ static char *lookup_symbol(char *symbol) {
         for (currentSymbol = table->firstSymbol; currentSymbol != NULL; currentSymbol = currentSymbol->nextSymbol) {
             char *name = currentSymbol->name;
             if (strcmp(name, symbol) == 0) {
+                symbol_address = currentSymbol->address;
                 printf("IDENT (name=%s, address=%d)\n", symbol, currentSymbol->address);
                 
                 char *type = currentSymbol->type;
@@ -350,6 +491,7 @@ static char *lookup_symbol(char *symbol) {
     }
 
     /* Undefined symbol */
+    symbol_address = -1;
     printf("error:%d: undefined: %s\n", yylineno + 1, symbol);
     error = true;
 
@@ -389,10 +531,10 @@ static void dump_symbol() {
 }
 
 static char abbr(char *type) {
-    if (strcmp(type, "int32") == 0 || strcmp(type, "int32_lit") == 0)      return 'I';
-    if (strcmp(type, "float32") == 0 || strcmp(type, "float32_lit") == 0)    return 'F';
-
-    /* error: cannot be converted */
+    if (strcmp(type, "int32") == 0 || strcmp(type, "int32_lit") == 0)       return 'I';
+    if (strcmp(type, "float32") == 0 || strcmp(type, "float32_lit") == 0)   return 'F';
+    if (strcmp(type, "bool") == 0 || strcmp(type, "bool_lit") == 0)         return 'B';
+    if (strcmp(type, "string") == 0 || strcmp(type, "string_lit") == 0)     return 'S';
 }
 
 static char *get_type(char *type) {

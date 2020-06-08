@@ -16,8 +16,7 @@
     /* Symbol table function - you can add new function if needed. */
     static void create_table();
     static int insert_symbol(char*, bool, char*);       /* insert_symbol(id, isArray, typeName): Returns the address of the symbol */
-    static char *lookup_symbol(char*);                  /* Returns the type name of the symbol */
-    static char *lookup_symbol_address(char*, int*);    /* lookup_symbol_address(symbol, symbol_address): Returns the type name of the symbol */
+    static char *lookup_symbol(char*, int*, bool*);     /* lookup_symbol(symbol, symbol_address, isArray): Returns the type name of the symbol */
     static void dump_symbol();
     static char abbr(char*);                            /* Gets the abbreviation of type name */
     static char *get_type(char*);                       /* Converts literal type to type name */
@@ -276,7 +275,15 @@ dcl
             break;
         }
     }
-    | VAR IDENT indexExpr type_name     { bool isArray = true; insert_symbol($2, isArray, $4); }
+    | VAR IDENT indexExpr type_name     { 
+        bool isArray = true,
+             isInt32 = (abbr($4) == 'I');
+        int address = insert_symbol($2, isArray, $4); 
+        
+        fprintf(assembly_file, "\t%s %s\n\t%s %d\n",
+                "newarray", isInt32 ? "int" : "float",
+                "astore", address);
+    }
     ;
 
 type_name
@@ -340,7 +347,7 @@ assignmentStmt
     : IDENT assign_op expr   { 
         int address;
         char *assign_op = $2,
-             *type = lookup_symbol_address($1, &address);
+             *type = lookup_symbol($1, &address, NULL);
         check_assignment(get_type(type), get_type($3), assign_op); 
         printf("%s\n", assign_op); 
 
@@ -416,26 +423,55 @@ assignmentStmt
     }
     | IDENT '=' expr         {
         int address;
-        char *type = lookup_symbol_address($1, &address),
+        char *type = lookup_symbol($1, &address, NULL),
              *store_type;
         check_operation(get_type(type), get_type($3), "ASSIGN"); 
         printf("ASSIGN\n"); 
 
-        switch (abbr(type)) {
-            case 'I':
-            case 'B':
-                store_type = "istore";
-            break;
-            case 'F':
-                store_type = "fstore";
-            break;
-            case 'S':
-                store_type = "astore";
-            break;
-        }
-
-        if (address != -1)
+        if (address != -1) {
+            switch (abbr(type)) {
+                case 'I':
+                case 'B':
+                    store_type = "istore";
+                break;
+                case 'F':
+                    store_type = "fstore";
+                break;
+                case 'S':
+                    store_type = "astore";
+                break;
+            }
             fprintf(assembly_file, "\t%s %d\n", store_type, address);
+        }
+    }
+    | IDENT '[' INT_LIT ']' '=' expr   {
+        int address,
+            index = $3;
+        char *type = lookup_symbol($1, &address, NULL),
+             *store_type;
+        check_operation(get_type(type), get_type($6), "ASSIGN"); 
+        printf("ASSIGN\n"); 
+
+        if (address != -1) {
+            switch (abbr(type)) {
+                case 'I':
+                case 'B':
+                    store_type = "iastore";
+                break;
+                case 'F':
+                    store_type = "fastore";
+                break;
+            }
+            fprintf(assembly_file, "\t%s %d\n\t%s\n\t%s %d\n\t%s\n\t%s\n", 
+                    "aload", address,
+                    "swap",
+                    "ldc", index,
+                    "swap",
+                    store_type);
+        }
+    }
+    | IDENT '[' expr ']' '=' expr    {
+
     }
     ;
 
@@ -457,29 +493,44 @@ primaryExpr
     : operand           { $$ = $1; }
     | indexExpr         { $$ = $1; }
     | conversionExpr    { $$ = $1; }
+    | operand indexExpr { 
+        char *type = $1;
+        $$ = type;
+
+        bool isInt32 = (abbr(type) == 'I');
+        fprintf(assembly_file, "\t%s\n", isInt32 ? "iaload" : "faload"); 
+    }
     ;
 
 operand
     : literal           { $$ = $1; }
     | '(' expr ')'      { $$ = $2; }
     | IDENT             { 
-        char *type = lookup_symbol($1),
+        int address;
+        bool isArray;
+        char *type = lookup_symbol($1, &address, &isArray),
              *load_type;
         $$ = type;
-        switch (abbr(type)) {
-            case 'I':
-            case 'B':
-                load_type = "iload";
-            break;
-            case 'F':
-                load_type = "fload";
-            break;
-            case 'S':
-                load_type = "aload";
-            break;
+        
+        if (address != -1) {
+            if (isArray) load_type = "aload";
+            else {
+                switch (abbr(type)) {
+                    case 'I':
+                    case 'B':
+                        load_type = "iload";
+                    break;
+                    case 'F':
+                        load_type = "fload";
+                    break;
+                    case 'S':
+                        load_type = "aload";
+                    break;
+                }
+            }
+            fprintf(assembly_file, "\t%s %d\n", load_type, address);
         }
-        if (symbol_address != -1)
-            fprintf(assembly_file, "\t%s %d\n", load_type, symbol_address);
+            
     }
     ;
 
@@ -701,7 +752,7 @@ static int insert_symbol(char *name, bool isArray, char *type) {
 }
 
 /* Looks up an entry in the symbol table */
-static char *lookup_symbol(char *symbol) {
+static char *lookup_symbol(char *symbol, int *address, bool *isArray) {
     /* Finds the matched symbol in the symbol tables */
     Table *table;
     for (table = currentTable; table != NULL; table = table->prevTable) {
@@ -709,49 +760,25 @@ static char *lookup_symbol(char *symbol) {
         for (currentSymbol = table->firstSymbol; currentSymbol != NULL; currentSymbol = currentSymbol->nextSymbol) {
             char *name = currentSymbol->name;
             if (strcmp(name, symbol) == 0) {
+                if (address != NULL)
+                    *address = currentSymbol->address;
                 symbol_address = currentSymbol->address;
                 printf("IDENT (name=%s, address=%d)\n", symbol, currentSymbol->address);
                 
                 char *type = currentSymbol->type;
                 if (strcmp(type, "array") == 0) {
+                    if (isArray != NULL) *isArray = true;
                     return currentSymbol->elementType;
                 }
+                if (isArray != NULL) *isArray = false;
                 return currentSymbol->type;
             }
         }
     }
 
     /* Undefined symbol */
+    if (address != NULL) *address = -1;
     symbol_address = -1;
-    printf("error:%d: undefined: %s\n", yylineno + 1, symbol);
-    error = true;
-
-    return "undefined";
-}
-
-/* Looks up an entry in the symbol table and gets its address */
-static char *lookup_symbol_address(char *symbol, int *address) {
-    /* Finds the matched symbol in the symbol tables */
-    Table *table;
-    for (table = currentTable; table != NULL; table = table->prevTable) {
-        Symbol *currentSymbol;
-        for (currentSymbol = table->firstSymbol; currentSymbol != NULL; currentSymbol = currentSymbol->nextSymbol) {
-            char *name = currentSymbol->name;
-            if (strcmp(name, symbol) == 0) {
-                *address = currentSymbol->address;
-                printf("IDENT (name=%s, address=%d)\n", symbol, currentSymbol->address);
-                
-                char *type = currentSymbol->type;
-                if (strcmp(type, "array") == 0) {
-                    return currentSymbol->elementType;
-                }
-                return currentSymbol->type;
-            }
-        }
-    }
-
-    /* Undefined symbol */
-    *address = -1;
     printf("error:%d: undefined: %s\n", yylineno + 1, symbol);
     error = true;
 

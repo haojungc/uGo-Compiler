@@ -484,7 +484,24 @@ operand
     ;
 
 conversionExpr
-    : type_name '(' expr ')'    { $$ = $1; printf("%c to %c\n", abbr($3), abbr($1)); }
+    : type_name '(' expr ')'    { 
+        char *type_from = $3,
+             *type_to = $1;
+        char type_from_abbr = abbr(type_from),
+             type_to_abbr = abbr(type_to);
+        $$ = type_to;
+        printf("%c to %c\n", type_from_abbr, type_to_abbr); 
+
+        if (type_from_abbr != type_to_abbr) {
+            char *conversion_type;
+            if (type_from_abbr == 'I' && type_to_abbr == 'F')
+                conversion_type = "i2f";
+            else if (type_from_abbr == 'F' && type_to_abbr == 'I')
+                conversion_type = "f2i";
+            
+            fprintf(assembly_file, "\t%s\n", conversion_type);
+        }
+    }
     ;
 
 literal

@@ -3,6 +3,8 @@
     #include "common.h" //Extern variables that communicate with lex
     // #define YYDEBUG 1
     // int yydebug = 1;
+    #define MAX_SCOPE 10
+    #define MAX_IF 50
 
     extern int yylineno;
     extern int yylex();
@@ -35,9 +37,10 @@
     char *file_name = "hw3.j";
     bool error = false;
     int cmp_count = 0;
-    int if_count = 0;
+    int if_count[MAX_SCOPE] = {0};          /* if_count[scope] */
+    int else_count[MAX_SCOPE][MAX_IF];      /* else_count[scope][if_count[scope]]: Stores the number of else of an complete if statement */
     int for_count = 0;
-    int block_count = 0;
+    int block_count[MAX_SCOPE] = {0};
 %}
 
 %error-verbose
@@ -312,25 +315,51 @@ block
     ;
 
 left_brace
-    : '{'   { scope++; create_table(); fprintf(assembly_file, "%s%d :\n", "L_block_begin_", block_count); }
+    : '{'   { 
+        scope++;
+        create_table();
+        fprintf(assembly_file, "%s%d_%d :\n", 
+                "L_block_begin_", scope - 1, block_count[scope - 1]);
+    }
     ;
 
 right_brace
-    : '}'   { dump_symbol(); scope--; fprintf(assembly_file, "%s%d :\n", "L_block_end_", block_count++); }
+    : '}'   { 
+        dump_symbol();
+        scope--;
+        fprintf(assembly_file, "%s%d_%d :\n", 
+                "L_block_end_", scope, block_count[scope]++);
+    }
     ;
 
 ifStmt
     : if_and_condition block {
-        /*fprintf(assembly_file, "");*/
+        fprintf(assembly_file, "%s%d_%d_%d :\n%s%d_%d :\n",
+                "if_false_", scope, if_count[scope], else_count[scope][if_count[scope]],
+                "if_exit_", scope, if_count[scope]);
+        if_count[scope]++;
     }
-    | if_and_condition block ELSE ifStmt
-    | if_and_condition block ELSE block
+    | if_and_condition block_and_else ifStmt
+    | if_and_condition block_and_else block {
+        fprintf(assembly_file, "%s%d_%d :\n",
+                "if_exit_", scope, if_count[scope]);
+        if_count[scope]++;
+    }
     ;
 
 if_and_condition
     : IF condition  {
-        fprintf(assembly_file, "\t%s %s%d\n",
-                "ifeq", "L_block_end_", block_count);
+        fprintf(assembly_file, "\t%s %s%d_%d_%d\n",
+                "ifeq", "if_false_", scope, if_count[scope], else_count[scope][if_count[scope]]);
+    }
+    ;
+
+block_and_else
+    : block ELSE    {
+        fprintf(assembly_file, "\t%s %s%d_%d\n%s%d_%d_%d :\n",
+                "goto", "if_exit_", scope, if_count[scope],
+                "if_false_", scope, if_count[scope], else_count[scope][if_count[scope]]);
+        else_count[scope][if_count[scope]]++;
     }
     ;
 
@@ -688,6 +717,10 @@ int main(int argc, char *argv[])
             ".limit stack 100 ; Define your storage size.",
             ".limit locals 100 ; Define your local space number.");       
 
+    for (int i = 0; i < MAX_SCOPE; i++)
+        for (int j = 0; j < MAX_IF; j++)
+            else_count[i][j] = 0;
+    
     yylineno = 0;
     create_table(); /* Creates the first table */
     yyparse();
@@ -836,6 +869,8 @@ static char abbr(char *type) {
     if (strcmp(type, "float32") == 0 || strcmp(type, "float32_lit") == 0)   return 'F';
     if (strcmp(type, "bool") == 0 || strcmp(type, "bool_lit") == 0)         return 'B';
     if (strcmp(type, "string") == 0 || strcmp(type, "string_lit") == 0)     return 'S';
+
+    return 'U'; // undefined
 }
 
 static char *get_type(char *type) {

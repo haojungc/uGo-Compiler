@@ -35,6 +35,9 @@
     char *file_name = "hw3.j";
     bool error = false;
     int cmp_count = 0;
+    int if_count = 0;
+    int for_count = 0;
+    int block_count = 0;
 %}
 
 %error-verbose
@@ -112,7 +115,7 @@ expr
         
         char type = abbr($1);
         bool isInt32 = (type == 'I');
-        fprintf(assembly_file, "\t%s\n%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
                 isInt32 ? "isub" : "fsub\n\tf2i",
                 "iflt L_cmp_", cmp_count,
                 "iconst_0",
@@ -128,7 +131,7 @@ expr
         
         char type = abbr($1);
         bool isInt32 = (type == 'I');
-        fprintf(assembly_file, "\t%s\n%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
                 isInt32 ? "isub" : "fsub\n\tf2i",
                 "ifgt L_cmp_", cmp_count,
                 "iconst_0",
@@ -144,7 +147,7 @@ expr
         
         char type = abbr($1);
         bool isInt32 = (type == 'I');
-        fprintf(assembly_file, "\t%s\n%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
                 isInt32 ? "isub" : "fsub\n\tf2i",
                 "ifge L_cmp_", cmp_count,
                 "iconst_0",
@@ -160,7 +163,7 @@ expr
         
         char type = abbr($1);
         bool isInt32 = (type == 'I');
-        fprintf(assembly_file, "\t%s\n%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
                 isInt32 ? "isub" : "fsub\n\tf2i",
                 "ifle L_cmp_", cmp_count,
                 "iconst_0",
@@ -176,7 +179,7 @@ expr
         
         char type = abbr($1);
         bool isInt32 = (type == 'I');
-        fprintf(assembly_file, "\t%s\n%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
                 isInt32 ? "isub" : "fsub\n\tf2i",
                 "ifeq L_cmp_", cmp_count,
                 "iconst_0",
@@ -192,7 +195,7 @@ expr
         
         char type = abbr($1);
         bool isInt32 = (type == 'I');
-        fprintf(assembly_file, "\t%s\n%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
                 isInt32 ? "isub" : "fsub\n\tf2i",
                 "ifne L_cmp_", cmp_count,
                 "iconst_0",
@@ -309,17 +312,26 @@ block
     ;
 
 left_brace
-    : '{'       { scope++; create_table(); }
+    : '{'   { scope++; create_table(); fprintf(assembly_file, "%s%d :\n", "L_block_begin_", block_count); }
     ;
 
 right_brace
-    : '}'       { dump_symbol(); scope--; }
+    : '}'   { dump_symbol(); scope--; fprintf(assembly_file, "%s%d :\n", "L_block_end_", block_count++); }
     ;
 
 ifStmt
-    : IF condition block
-    | IF condition block ELSE ifStmt
-    | IF condition block ELSE block
+    : if_and_condition block {
+        /*fprintf(assembly_file, "");*/
+    }
+    | if_and_condition block ELSE ifStmt
+    | if_and_condition block ELSE block
+    ;
+
+if_and_condition
+    : IF condition  {
+        fprintf(assembly_file, "\t%s %s%d\n",
+                "ifeq", "L_block_end_", block_count);
+    }
     ;
 
 condition
@@ -327,7 +339,9 @@ condition
     ;
 
 forStmt
-    : FOR condition block
+    : FOR condition block   {
+
+    }
     | FOR forClause block
     ;
 

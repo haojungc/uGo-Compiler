@@ -39,7 +39,7 @@
     int cmp_count = 0;
     int if_count[MAX_SCOPE] = {0};          /* if_count[scope] */
     int else_count[MAX_SCOPE][MAX_IF];      /* else_count[scope][if_count[scope]]: Stores the number of else of an complete if statement */
-    int for_count = 0;
+    int for_count[MAX_SCOPE] = {0};
     int block_count[MAX_SCOPE] = {0};
 %}
 
@@ -368,10 +368,31 @@ condition
     ;
 
 forStmt
-    : FOR condition block   {
-
+    : for_and_condition block   {
+        fprintf(assembly_file, "\t%s %s_%d_%d\n%s_%d_%d :\n",
+                "goto", "L_for_begin", scope, for_count[scope],
+                "L_for_exit", scope, for_count[scope]);
+        for_count[scope]++;
     }
-    | FOR forClause block
+    | for_and_forClause block
+    ;
+
+for
+    : FOR   {
+        fprintf(assembly_file, "%s_%d_%d :\n",
+                "L_for_begin", scope, for_count[scope]);
+    }
+    ;
+
+for_and_condition
+    : for condition {
+        fprintf(assembly_file, "\t%s %s_%d_%d\n",
+                "ifeq", "L_for_exit", scope, for_count[scope]);
+    }
+    ;
+
+for_and_forClause
+    : for forClause
     ;
 
 forClause

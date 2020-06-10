@@ -335,14 +335,14 @@ right_brace
 ifStmt
     : if_and_condition block {
         fprintf(assembly_file, "%s%d_%d_%d :\n%s%d_%d :\n",
-                "if_false_", scope, if_count[scope], else_count[scope][if_count[scope]],
-                "if_exit_", scope, if_count[scope]);
+                "L_if_false_", scope, if_count[scope], else_count[scope][if_count[scope]],
+                "L_if_exit_", scope, if_count[scope]);
         if_count[scope]++;
     }
     | if_and_condition block_and_else ifStmt
     | if_and_condition block_and_else block {
         fprintf(assembly_file, "%s%d_%d :\n",
-                "if_exit_", scope, if_count[scope]);
+                "L_if_exit_", scope, if_count[scope]);
         if_count[scope]++;
     }
     ;
@@ -350,15 +350,15 @@ ifStmt
 if_and_condition
     : IF condition  {
         fprintf(assembly_file, "\t%s %s%d_%d_%d\n",
-                "ifeq", "if_false_", scope, if_count[scope], else_count[scope][if_count[scope]]);
+                "ifeq", "L_if_false_", scope, if_count[scope], else_count[scope][if_count[scope]]);
     }
     ;
 
 block_and_else
     : block ELSE    {
         fprintf(assembly_file, "\t%s %s%d_%d\n%s%d_%d_%d :\n",
-                "goto", "if_exit_", scope, if_count[scope],
-                "if_false_", scope, if_count[scope], else_count[scope][if_count[scope]]);
+                "goto", "L_if_exit_", scope, if_count[scope],
+                "L_if_false_", scope, if_count[scope], else_count[scope][if_count[scope]]);
         else_count[scope][if_count[scope]]++;
     }
     ;
@@ -374,7 +374,12 @@ forStmt
                 "L_for_exit", scope, for_count[scope]);
         for_count[scope]++;
     }
-    | for_and_forClause block
+    | for_and_forClause block   {
+        fprintf(assembly_file, "\t%s %s_%d_%d\n%s_%d_%d :\n",
+                "goto", "L_for_post", scope, for_count[scope],
+                "L_for_exit", scope, for_count[scope]);
+        for_count[scope]++;
+    }
     ;
 
 for
@@ -392,11 +397,27 @@ for_and_condition
     ;
 
 for_and_forClause
-    : for forClause
+    : for_and_initStmt condition_2 ';' postStmt  {
+        fprintf(assembly_file, "\t%s %s_%d_%d\n%s_%d_%d :\n",
+                "goto", "L_for_condition", scope, for_count[scope],
+                "L_for_do", scope, for_count[scope]);
+    }
     ;
 
-forClause
-    : initStmt ';' condition ';' postStmt
+for_and_initStmt
+    : for initStmt ';'  {
+        fprintf(assembly_file, "%s_%d_%d :\n",
+                "L_for_condition", scope, for_count[scope]);
+    }
+    ;
+
+condition_2
+    : condition {
+        fprintf(assembly_file, "\t%s %s_%d_%d\n\t%s %s_%d_%d\n%s_%d_%d :\n",
+                "ifeq", "L_for_exit", scope, for_count[scope],
+                "goto", "L_for_do", scope, for_count[scope],
+                "L_for_post", scope, for_count[scope]);
+    }
     ;
 
 initStmt

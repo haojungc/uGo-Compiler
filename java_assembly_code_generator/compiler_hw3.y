@@ -106,7 +106,7 @@ stmt
     | ifStmt NEWLINE        { fprintf(assembly_file, "\n"); }
     | forStmt NEWLINE       { fprintf(assembly_file, "\n"); }
     | printStmt NEWLINE     { fprintf(assembly_file, "\n"); }
-    | NEWLINE               { fprintf(assembly_file, "\n"); }
+    | NEWLINE
     ;
 
 expr
@@ -334,31 +334,51 @@ right_brace
 
 ifStmt
     : if_and_condition block {
-        fprintf(assembly_file, "%s%d_%d_%d :\n%s%d_%d :\n",
-                "L_if_false_", scope, if_count[scope], else_count[scope][if_count[scope]],
-                "L_if_exit_", scope, if_count[scope]);
+        /*
+            (condition)             ; iconst_0/iconst_1
+            ifeq L_if_false
+            (block)                 ; do this if true
+
+        L_if_false :                ; do nothing
+        L_if_exit :                 ; end if
+        */
+        fprintf(assembly_file, "%s_%d_%d_%d :\n%s_%d_%d :\n",
+                "L_if_false", scope, if_count[scope], else_count[scope][if_count[scope]],
+                "L_if_exit", scope, if_count[scope]);
         if_count[scope]++;
     }
     | if_and_condition block_and_else ifStmt
     | if_and_condition block_and_else block {
-        fprintf(assembly_file, "%s%d_%d :\n",
-                "L_if_exit_", scope, if_count[scope]);
+        /*
+            (condition)             ; iconst_0/iconst_1
+            ifeq L_if_false
+            (block)                 ; do this if true
+            goto L_if_exit
+
+        L_if_false :         
+            (else_block)            ; do this if false
+            
+        L_if_exit :                 ; end if
+            ...
+        */
+        fprintf(assembly_file, "%s_%d_%d :\n",
+                "L_if_exit", scope, if_count[scope]);
         if_count[scope]++;
     }
     ;
 
 if_and_condition
     : IF condition  {
-        fprintf(assembly_file, "\t%s %s%d_%d_%d\n",
-                "ifeq", "L_if_false_", scope, if_count[scope], else_count[scope][if_count[scope]]);
+        fprintf(assembly_file, "\t%s %s_%d_%d_%d\n",
+                "ifeq", "L_if_false", scope, if_count[scope], else_count[scope][if_count[scope]]);
     }
     ;
 
 block_and_else
     : block ELSE    {
-        fprintf(assembly_file, "\t%s %s%d_%d\n%s%d_%d_%d :\n",
-                "goto", "L_if_exit_", scope, if_count[scope],
-                "L_if_false_", scope, if_count[scope], else_count[scope][if_count[scope]]);
+        fprintf(assembly_file, "\t%s %s_%d_%d\n%s_%d_%d_%d :\n",
+                "goto", "L_if_exit", scope, if_count[scope],
+                "L_if_false", scope, if_count[scope], else_count[scope][if_count[scope]]);
         else_count[scope][if_count[scope]]++;
     }
     ;
@@ -369,12 +389,40 @@ condition
 
 forStmt
     : for_and_condition block   {
+        /*
+        L_for_begin :
+            (condition)             ; iconst_0/iconst_1
+            ifeq L_for_exit
+            (block)                 ; do this if true
+            goto L_for_begin
+        
+        L_for_exit :
+        */
         fprintf(assembly_file, "\t%s %s_%d_%d\n%s_%d_%d :\n",
                 "goto", "L_for_begin", scope, for_count[scope],
                 "L_for_exit", scope, for_count[scope]);
         for_count[scope]++;
     }
     | for_and_forClause block   {
+        /*
+        L_for_begin :
+            (initStmt)
+        
+        L_for_condition :
+            (condition)
+            ifeq L_for_exit
+            goto L_for_do
+        
+        L_for_post :
+            (postStmt)
+            goto L_for_begin
+
+        L_for_do :                  ; do this if true
+            (block)                     
+            goto L_for_post
+        
+        L_for_exit :
+        */
         fprintf(assembly_file, "\t%s %s_%d_%d\n%s_%d_%d :\n",
                 "goto", "L_for_post", scope, for_count[scope],
                 "L_for_exit", scope, for_count[scope]);
@@ -436,6 +484,13 @@ assignmentStmt
         check_assignment(get_type(type), get_type($3), assign_op); 
         printf("%s\n", assign_op); 
 
+        /*
+            (expr)
+            [swap]                  ; only for div and rem
+            (assign_op)             ; iadd/isub/imul...
+            istore/fstore <address>
+        */
+        
         if (address != -1) {
             char *load_type,
                  *store_type,
@@ -502,8 +557,7 @@ assignmentStmt
             fprintf(assembly_file, "\t%s %d\n\t%s\n\t%s %d\n", 
                     load_type, address,
                     op,
-                    store_type,
-                    address);
+                    store_type, address);
         }
     }
     | IDENT '=' expr         {
@@ -537,6 +591,15 @@ assignmentStmt
         check_operation(get_type(type), get_type($6), "ASSIGN"); 
         printf("ASSIGN\n"); 
 
+        /*
+            (expr)                  ; a value is pushed onto the top of the stack
+            aload <address>         ; the address to be assigned
+            swap                    ; let the value be on the top of the stack
+            ldc <index>             ; the index of the array
+            swap                    ; let the value be on the top of the stack
+            iastore/fastore
+        */
+        
         if (address != -1) {
             switch (abbr(type)) {
                 case 'I':
@@ -555,9 +618,7 @@ assignmentStmt
                     store_type);
         }
     }
-    | IDENT '[' expr ']' '=' expr    {
-
-    }
+    | IDENT '[' expr ']' '=' expr
     ;
 
 unaryExpr
@@ -685,12 +746,12 @@ printStmt
 
         switch (abbr(type)) {
             case 'B':
-                fprintf(assembly_file, "\t%s%d\n\t%s\n\t%s%d\n",
-                    "ifne L_cmp_", cmp_count,
+                fprintf(assembly_file, "\t%s_%d\n\t%s\n\t%s_%d\n",
+                    "ifne L_cmp", cmp_count,
                     "ldc \"false\"",
-                    "goto L_cmp_", cmp_count + 1);
-                fprintf(assembly_file, "%s%d%c\n\t%s\n", "L_cmp_", cmp_count, ':', "ldc \"true\"");
-                fprintf(assembly_file, "%s%d%c\n", "L_cmp_", cmp_count + 1, ':');
+                    "goto L_cmp", cmp_count + 1);
+                fprintf(assembly_file, "%s_%d :\n\t%s\n", "L_cmp", cmp_count, "ldc \"true\"");
+                fprintf(assembly_file, "%s_%d :\n", "L_cmp", cmp_count + 1);
                 cmp_count += 2;
             case 'S':
                 print_param = "Ljava/lang/String;";
@@ -714,12 +775,12 @@ printStmt
         
         switch (abbr(type)) {
             case 'B':
-                fprintf(assembly_file, "\t%s%d\n\t%s\n\t%s%d\n",
-                    "ifne L_cmp_", cmp_count,
+                fprintf(assembly_file, "\t%s_%d\n\t%s\n\t%s_%d\n",
+                    "ifne L_cmp", cmp_count,
                     "ldc \"false\"",
-                    "goto L_cmp_", cmp_count + 1);
-                fprintf(assembly_file, "%s%d%c\n\t%s\n", "L_cmp_", cmp_count, ':', "ldc \"true\"");
-                fprintf(assembly_file, "%s%d%c\n", "L_cmp_", cmp_count + 1, ':');
+                    "goto L_cmp", cmp_count + 1);
+                fprintf(assembly_file, "%s_%d :\n\t%s\n", "L_cmp", cmp_count, "ldc \"true\"");
+                fprintf(assembly_file, "%s_%d :\n", "L_cmp", cmp_count + 1);
                 cmp_count += 2;
             case 'S':
                 print_param = "Ljava/lang/String;";
@@ -764,7 +825,7 @@ int main(int argc, char *argv[])
             else_count[i][j] = 0;
     
     yylineno = 0;
-    create_table(); /* Creates the first table */
+    create_table();     /* Creates the first table */
     yyparse();
     dump_symbol();
 

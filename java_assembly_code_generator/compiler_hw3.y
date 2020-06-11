@@ -110,22 +110,35 @@ stmt
     ;
 
 expr
-    : expr LOR expr     { $$ = "bool"; check_operation(get_type($1), get_type($3), "LOR"); printf("LOR\n"); fprintf(assembly_file, "\tior\n"); }
-    | expr LAND expr    { $$ = "bool"; check_operation(get_type($1), get_type($3), "LAND"); printf("LAND\n"); fprintf(assembly_file, "\tiand\n"); }
+    : expr LOR expr     { $$ = "bool"; check_operation(get_type($1), get_type($3), "LOR"); printf("LOR\n"); fprintf(assembly_file, "\t%s\n", "ior"); }
+    | expr LAND expr    { $$ = "bool"; check_operation(get_type($1), get_type($3), "LAND"); printf("LAND\n"); fprintf(assembly_file, "\t%s\n", "iand"); }
     | expr '<' expr     { 
         $$ = "bool";
         printf("LSS\n"); 
         
         char type = abbr($1);
         bool isInt32 = (type == 'I');
-        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+        /* Sample Output */
+        /*
+            (value from left expr)
+            (value from right expr)
+            <comparison_operator> L_cmp_0   ; jump if true
+            iconst_0
+            goto L_cmp_1
+        
+        L_cmp_0 :
+            iconst_1
+        
+        L_cmp_1 :
+        */
+        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d :\n\t%s\n%s%d :\n", 
                 isInt32 ? "isub" : "fsub\n\tf2i",
                 "iflt L_cmp_", cmp_count,
                 "iconst_0",
                 "goto L_cmp_", cmp_count + 1,
-                "L_cmp_", cmp_count, ':',
+                "L_cmp_", cmp_count,
                 "iconst_1",
-                "L_cmp_", cmp_count + 1, ':');
+                "L_cmp_", cmp_count + 1);
         cmp_count += 2;
     }
     | expr '>' expr     { 
@@ -134,14 +147,14 @@ expr
         
         char type = abbr($1);
         bool isInt32 = (type == 'I');
-        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d :\n\t%s\n%s%d :\n", 
                 isInt32 ? "isub" : "fsub\n\tf2i",
                 "ifgt L_cmp_", cmp_count,
                 "iconst_0",
                 "goto L_cmp_", cmp_count + 1,
-                "L_cmp_", cmp_count, ':',
+                "L_cmp_", cmp_count,
                 "iconst_1",
-                "L_cmp_", cmp_count + 1, ':');
+                "L_cmp_", cmp_count + 1);
         cmp_count += 2;
     }
     | expr GEQ expr     { 
@@ -150,14 +163,14 @@ expr
         
         char type = abbr($1);
         bool isInt32 = (type == 'I');
-        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d :\n\t%s\n%s%d :\n", 
                 isInt32 ? "isub" : "fsub\n\tf2i",
                 "ifge L_cmp_", cmp_count,
                 "iconst_0",
                 "goto L_cmp_", cmp_count + 1,
-                "L_cmp_", cmp_count, ':',
+                "L_cmp_", cmp_count,
                 "iconst_1",
-                "L_cmp_", cmp_count + 1, ':');
+                "L_cmp_", cmp_count + 1);
         cmp_count += 2;
     }
     | expr LEQ expr     { 
@@ -166,14 +179,14 @@ expr
         
         char type = abbr($1);
         bool isInt32 = (type == 'I');
-        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d :\n\t%s\n%s%d :\n", 
                 isInt32 ? "isub" : "fsub\n\tf2i",
                 "ifle L_cmp_", cmp_count,
                 "iconst_0",
                 "goto L_cmp_", cmp_count + 1,
-                "L_cmp_", cmp_count, ':',
+                "L_cmp_", cmp_count,
                 "iconst_1",
-                "L_cmp_", cmp_count + 1, ':');
+                "L_cmp_", cmp_count + 1);
         cmp_count += 2;
     }
     | expr EQL expr     { 
@@ -182,14 +195,14 @@ expr
         
         char type = abbr($1);
         bool isInt32 = (type == 'I');
-        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d :\n\t%s\n%s%d :\n", 
                 isInt32 ? "isub" : "fsub\n\tf2i",
                 "ifeq L_cmp_", cmp_count,
                 "iconst_0",
                 "goto L_cmp_", cmp_count + 1,
-                "L_cmp_", cmp_count, ':',
+                "L_cmp_", cmp_count,
                 "iconst_1",
-                "L_cmp_", cmp_count + 1, ':');
+                "L_cmp_", cmp_count + 1);
         cmp_count += 2;
     }
     | expr NEQ expr     { 
@@ -198,45 +211,65 @@ expr
         
         char type = abbr($1);
         bool isInt32 = (type == 'I');
-        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d%c\n\t%s\n%s%d%c\n", 
+        fprintf(assembly_file, "\t%s\n\t%s%d\n\t%s\n\t%s%d\n%s%d :\n\t%s\n%s%d :\n", 
                 isInt32 ? "isub" : "fsub\n\tf2i",
                 "ifne L_cmp_", cmp_count,
                 "iconst_0",
                 "goto L_cmp_", cmp_count + 1,
-                "L_cmp_", cmp_count, ':',
+                "L_cmp_", cmp_count,
                 "iconst_1",
-                "L_cmp_", cmp_count + 1, ':');
+                "L_cmp_", cmp_count + 1);
         cmp_count += 2;
     }
     | expr '+' expr     { 
-        $$ = $1; 
-        check_operation(get_type($1), get_type($3), "ADD"); 
+        char *type = $1;
+
+        $$ = type;
+        check_operation(get_type(type), get_type($3), "ADD"); 
         printf("ADD\n"); 
-        char *op = (strcmp(get_type($1), "int32") == 0) ? "iadd" : "fadd";
-        fprintf(assembly_file, "\t%s\n", op); 
+
+        bool isInt32 = (abbr(type) == 'I');
+        fprintf(assembly_file, "\t%s\n", isInt32 ? "iadd" : "fadd"); 
     }
     | expr '-' expr     { 
-        $$ = $1; 
-        check_operation(get_type($1), get_type($3), "SUB"); 
+        char *type = $1;
+
+        $$ = type; 
+        check_operation(get_type(type), get_type($3), "SUB"); 
         printf("SUB\n");
-        char *op = (strcmp(get_type($1), "int32") == 0) ? "isub" : "fsub";
-        fprintf(assembly_file, "\t%s\n", op); 
+
+        bool isInt32 = (abbr(type) == 'I');
+        fprintf(assembly_file, "\t%s\n", isInt32 ? "isub" : "fsub"); 
     }
     | expr '*' expr     { 
-        $$ = $1; 
-        check_operation(get_type($1), get_type($3), "MUL"); 
+        char *type = $1;
+
+        $$ = type;
+        check_operation(get_type(type), get_type($3), "MUL"); 
         printf("MUL\n"); 
-        char *op = (strcmp(get_type($1), "int32") == 0) ? "imul" : "fmul";
-        fprintf(assembly_file, "\t%s\n", op);
+
+        bool isInt32 = (abbr(type) == 'I');
+        fprintf(assembly_file, "\t%s\n", isInt32 ? "imul" : "fmul");
     }
     | expr '/' expr     { 
-        $$ = $1; 
-        check_operation(get_type($1), get_type($3), "QUO"); 
-        printf("QUO\n"); 
-        char *op = (strcmp(get_type($1), "int32") == 0) ? "idiv" : "fdiv";
-        fprintf(assembly_file, "\t%s\n", op);
+        char *type = $1;
+
+        $$ = type;
+        check_operation(get_type(type), get_type($3), "QUO"); 
+        printf("QUO\n");
+
+        bool isInt32 = (abbr(type) == 'I');
+        fprintf(assembly_file, "\t%s\n", isInt32 ? "idiv" : "fdiv");
     }
-    | expr '%' expr     { $$ = $1; check_operation(get_type($1), get_type($3), "REM"); printf("REM\n"); fprintf(assembly_file, "\t%s\n", "irem"); }
+    | expr '%' expr     { 
+        char *type = $1;
+
+        $$ = type;
+        check_operation(get_type(type), get_type($3), "REM"); 
+        printf("REM\n");
+
+        fprintf(assembly_file, "\t%s\n", "irem"); 
+    }
     | unaryExpr         { $$ = $1; }
     ;
 
@@ -268,6 +301,7 @@ dcl
         bool isArray = false;
         int address = insert_symbol($2, isArray, type); 
 
+        /* Assigns default value */
         switch (abbr(type)) {
             case 'I':
                 fprintf(assembly_file, "\t%s\n\t%s %d\n",
@@ -318,8 +352,8 @@ left_brace
     : '{'   { 
         scope++;
         create_table();
-        fprintf(assembly_file, "%s%d_%d :\n", 
-                "L_block_begin_", scope - 1, block_count[scope - 1]);
+        fprintf(assembly_file, "%s_%d_%d :\n", 
+                "L_block_begin", scope - 1, block_count[scope - 1]);
     }
     ;
 
@@ -327,13 +361,14 @@ right_brace
     : '}'   { 
         dump_symbol();
         scope--;
-        fprintf(assembly_file, "%s%d_%d :\n", 
-                "L_block_end_", scope, block_count[scope]++);
+        fprintf(assembly_file, "%s_%d_%d :\n", 
+                "L_block_end", scope, block_count[scope]++);
     }
     ;
 
 ifStmt
     : if_and_condition block {
+        /* Sample Output */
         /*
             (condition)             ; iconst_0/iconst_1
             ifeq L_if_false
@@ -349,6 +384,7 @@ ifStmt
     }
     | if_and_condition block_and_else ifStmt
     | if_and_condition block_and_else block {
+        /* Sample Output */
         /*
             (condition)             ; iconst_0/iconst_1
             ifeq L_if_false
@@ -389,6 +425,7 @@ condition
 
 forStmt
     : for_and_condition block   {
+        /* Sample Output */
         /*
         L_for_begin :
             (condition)             ; iconst_0/iconst_1
@@ -404,6 +441,7 @@ forStmt
         for_count[scope]++;
     }
     | for_and_forClause block   {
+        /* Sample Output */
         /*
         L_for_begin :
             (initStmt)
@@ -484,6 +522,7 @@ assignmentStmt
         check_assignment(get_type(type), get_type($3), assign_op); 
         printf("%s\n", assign_op); 
 
+        /* Sample Output */
         /*
             (expr)
             [swap]                  ; only for div and rem
@@ -591,6 +630,7 @@ assignmentStmt
         check_operation(get_type(type), get_type($6), "ASSIGN"); 
         printf("ASSIGN\n"); 
 
+        /* Sample Output */
         /*
             (expr)                  ; a value is pushed onto the top of the stack
             aload <address>         ; the address to be assigned
@@ -690,13 +730,10 @@ conversionExpr
         printf("%c to %c\n", type_from_abbr, type_to_abbr); 
 
         if (type_from_abbr != type_to_abbr) {
-            char *conversion_type;
             if (type_from_abbr == 'I' && type_to_abbr == 'F')
-                conversion_type = "i2f";
+                fprintf(assembly_file, "\t%s\n", "i2f");
             else if (type_from_abbr == 'F' && type_to_abbr == 'I')
-                conversion_type = "f2i";
-            
-            fprintf(assembly_file, "\t%s\n", conversion_type);
+                fprintf(assembly_file, "\t%s\n", "f2i");
         }
     }
     ;
@@ -707,8 +744,9 @@ literal
     | BOOL_LIT              { 
         $$ = "bool_lit"; 
         printf("%s\n", $1); 
-        char *s = (strcmp($1, "TRUE") == 0) ? "iconst_1" : "iconst_0";
-        fprintf(assembly_file, "\t%s\n", s);
+        
+        bool isTrue = (strcmp($1, "TRUE") == 0);
+        fprintf(assembly_file, "\t%s\n", isTrue ? "iconst_1" : "iconst_0");
     }
     | '"' STRING_LIT '"'    { $$ = "string_lit"; printf("STRING_LIT %s\n", $2); fprintf(assembly_file, "\tldc \"%s\"\n", $2); free($2); }
     ;
@@ -727,14 +765,20 @@ incDecStmt
         bool isInt32 = (strcmp($1, "int32") == 0);
         char *op = isInt32 ? "iadd" : "i2f\n\tfadd",
              *store_type = isInt32 ? "istore" : "fstore";
-        fprintf(assembly_file, "\t%s\n\t%s\n\t%s %d\n", "ldc 1", op, store_type, symbol_address); 
+        fprintf(assembly_file, "\t%s\n\t%s\n\t%s %d\n", 
+                "ldc 1", 
+                op, 
+                store_type, symbol_address); 
     }
     | expr DEC      { 
         printf("DEC\n"); 
         bool isInt32 = (strcmp($1, "int32") == 0);
         char *op = isInt32 ? "isub" : "i2f\n\tfsub",
              *store_type = isInt32 ? "istore" : "fstore";
-        fprintf(assembly_file, "\t%s\n\t%s\n\t%s %d\n", "ldc 1", op, store_type, symbol_address); 
+        fprintf(assembly_file, "\t%s\n\t%s\n\t%s %d\n", 
+                "ldc 1", 
+                op, 
+                store_type, symbol_address); 
     }
     ;
 
@@ -810,7 +854,12 @@ int main(int argc, char *argv[])
         yyin = stdin;
     }
 
-    /* Setup Jasmin program */
+    /* Initializes else_count */
+    for (int i = 0; i < MAX_SCOPE; i++)
+        for (int j = 0; j < MAX_IF; j++)
+            else_count[i][j] = 0;
+    
+    /* Sets up Jasmin program */
     assembly_file = fopen(file_name, "w");
     fprintf(assembly_file, "%s\n%s\n%s\n%s\n%s\n%s\n\n",
             ".source hw3.j",
@@ -818,11 +867,7 @@ int main(int argc, char *argv[])
             ".super java/lang/Object",
             ".method public static main([Ljava/lang/String;)V",
             ".limit stack 100 ; Define your storage size.",
-            ".limit locals 100 ; Define your local space number.");       
-
-    for (int i = 0; i < MAX_SCOPE; i++)
-        for (int j = 0; j < MAX_IF; j++)
-            else_count[i][j] = 0;
+            ".limit locals 100 ; Define your local space number.");
     
     yylineno = 0;
     create_table();     /* Creates the first table */
@@ -835,6 +880,7 @@ int main(int argc, char *argv[])
     else fprintf(assembly_file, "\t%s\n%s", "return", ".end method");
     fclose(assembly_file);
     fclose(yyin);
+
     return 0;
 }
 

@@ -453,7 +453,7 @@ forStmt
         
         L_for_post :
             (postStmt)
-            goto L_for_begin
+            goto L_for_condition
 
         L_for_do :                  ; do this if true
             (block)                     
